@@ -1,68 +1,30 @@
 {
-    "blogs": {
-        "2024": [
-            {
-                "path": "/assets/blogs/2024/catalan.html",
-                "description": "Catalan"
-            },
-            {
-                "path": "/assets/blogs/2024/catalan.html",
-                "description": "Catalan"
-            }
-        ],
-        "2023": [
-            {
-                "path": "/assets/blogs/2024/catalan.html",
-                "description": "Catalan"
-            }
-        ],        "2022": [
-            {
-                "path": "/assets/blogs/2024/catalan.html",
-                "description": "Catalan"
-            }
-        ]
-    },
-    "photos": {
-        "2024": [
-            {
-                "path": "/assets/photos/2024/mmexport1722745241226.jpg",
-                "description": "Giant Panda at Chengdu"
-            },
-            {
-                "path": "/assets/photos/2024/mmexport1723459455989.jpg",
-                "description": "I've graduated from SWJTU, woohoo!"
-            },
-            {
-                "path": "/assets/photos/2024/mmexport1723459455989.jpg",
-                "description": "I've graduated from SWJTU, woohoo!"
-            }
-        ],
-        "2023": [
-            {
-                "path": "/assets/photos/2024/mmexport1722745241226.jpg",
-                "description": "Giant Panda at Chengdu"
-            },
-            {
-                "path": "/assets/photos/2024/mmexport1723459455989.jpg",
-                "description": "I've graduated from SWJTU, woohoo!"
-            }
-        ]
-    },
-    "publications": {
-        "2023": [
-            {
-                "path": "/assets/publications/2023/CSISIAC2023.json",
-                "description": ""
-            },            {
-                "path": "/assets/publications/2023/CSISIAC2023.json",
-                "description": ""
-            }
-        ],
-        "2024": [
-            {
-                "path": "/assets/publications/2023/CSISIAC2023.json",
-                "description": ""
-            }
-        ]
-    }
+  "blogs": {
+    "2024": [
+      {
+        "path": "/assets/blogs/2024/catalan.html",
+        "description": "Catalan Numbers"
+      }
+    ]
+  },
+  "photos": {
+    "2024": [
+      {
+        "path": "/assets/photos/2024/mmexport1722745241226.jpg",
+        "description": "Giant Panda at Chengdu"
+      },
+      {
+        "path": "/assets/photos/2024/mmexport1723459455989.jpg",
+        "description": "I've graduated from SWJTU, woohoo!"
+      }
+    ]
+  },
+  "publications": {
+    "2023": [
+      {
+        "path": "/assets/publications/2023/CSISIAC2023.json",
+        "description": ""
+      }
+    ]
+  }
 }

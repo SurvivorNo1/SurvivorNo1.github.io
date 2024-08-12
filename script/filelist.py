@@ -80,7 +80,7 @@ def update_filepath(jsondata):
     return jsondata
 
 if __name__ == "__main__":
-    path = "../src/filelist.json"
+    path = "../src/constant/filelist.json"
 
     if not os.path.exists(path):
         print("File does not exist")

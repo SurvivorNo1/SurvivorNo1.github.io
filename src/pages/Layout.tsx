@@ -2,19 +2,32 @@ import React from 'react';
 import { Link, Outlet } from 'react-router-dom';
 const Layout: React.FC = () => {
   const textShadowStyle = {
-    textShadow: '3px 3px 3px rgba(0, 0, 0, 0.4)'
+    textShadow: '3px 3px 3px rgba(0, 0, 0, 0.4)',
   };
 
   return (
     <div className="flex flex-col min-h-screen">
       {/* 页眉 */}
       <header className="flex-col bg-white text-bold text-black  p-4 md:sticky md:top-0 mb-0 ">
-      <h1 className="text-center text-2xl mb-4 text-shadow" style={textShadowStyle}>SurvivorNo1's Website</h1>
-      <nav className="flex flex-wrap justify-center space-x-4 md:space-x-8 p-4">
-          <Link to="/" className="text-blue-600 hover:underline ">About Me</Link>
-          <Link to="/Publications" className="text-blue-600 hover:underline">Publications</Link>
-          <Link to="/photos" className="text-blue-600 hover:underline">Photos</Link>
-          <Link to="/blogs" className="text-blue-600 hover:underline">Blogs</Link>
+        <h1
+          className="text-center text-2xl mb-4 text-shadow"
+          style={textShadowStyle}
+        >
+          SurvivorNo1's Website
+        </h1>
+        <nav className="flex flex-wrap justify-center space-x-4 md:space-x-8 p-4">
+          <Link to="/" className="text-blue-600 hover:underline ">
+            About Me
+          </Link>
+          <Link to="/Publications" className="text-blue-600 hover:underline">
+            Publications
+          </Link>
+          <Link to="/photos" className="text-blue-600 hover:underline">
+            Photos
+          </Link>
+          <Link to="/blogs" className="text-blue-600 hover:underline">
+            Blogs
+          </Link>
           <a
             href="https://github.com/SurvivorNo1"
             target="_blank"

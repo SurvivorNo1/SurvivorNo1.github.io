@@ -11,7 +11,7 @@
         "2024": [
             {
                 "path": "/assets/photos/2024/mmexport1722745241226.jpg",
-                "description": "from Chengdu Research Base of Giant Panda Breeding"
+                "description": ""
             },
             {
                 "path": "/assets/photos/2024/mmexport1723459455989.jpg",
@@ -23,6 +23,12 @@
         "2023": [
             {
                 "path": "/assets/publications/2023/CSISIAC2023.json",
+                "description": ""
+            }
+        ],
+        "2024": [
+            {
+                "path": "/assets/publications/2024/CSISIAC2023.json",
                 "description": ""
             }
         ]
