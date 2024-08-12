@@ -1,0 +1,12 @@
+{
+    "Title": "Predicting EGFR Mutation Status Using Multi-View Transformer",
+    "Authors": "Shengjie Yang, Jun Shao, Kai Zhou, Zhe Yang, YunJie Liu, Chengdi Wang, Xiuyuan Xu",
+    "PublicationDate": "2023/10/20",
+    "Conference": "2023 International Annual Conference on Complex Systems and Intelligent Science (CSIS-IAC)",
+    "ConferenceAbbreviation": "CSIS-IAC",
+    "Pages": "538-545",
+    "Publisher": "IEEE",
+    "Description": "Targeted therapy is considered one of the most effective treatment strategies for advanced lung cancer, especially in patients with epidermal growth factor receptor (EGFR) mutations. However, current methods for identifying EGFR mutations are both time-consuming and invasive. The integration of CT imaging and artificial intelligence techniques provides a non-invasive means of predicting EGFR mutations. A notable challenge in clinical practice is the limited availability of EGFR-positive patients, which poses difficulties in training effective prediction models. To tackle this challenge, we present an approach rooted in multi-view learning using CT imaging to accurately predict EGFR mutation status. In this proposed approach, we initially extract features independently from multiple views using MobileNetV2. Subsequently, we employ an attention mechanism to consolidate these features for mutation status prediction \u2026",
+    "ScholarArticles": "Predicting EGFR Mutation Status Using Multi-View Transformer",
+    "Link": "https://ieeexplore.ieee.org/abstract/document/10363840/"
+}
