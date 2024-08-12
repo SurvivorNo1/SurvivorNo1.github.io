@@ -1,1 +1,41 @@
+name: Vite.js CI
 
+on:
+  push:
+    branches: ['main']
+  pull_request:
+    branches: ['main']
+  workflow_dispatch:
+
+env:
+  BUILD_DIR: dist # 定义全局变量
+
+jobs:
+  build-and-test-for-ghpages:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20.x' # 指定Node.js版本，应与你的开发环境一致
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build # 构建项目，假设你的package.json中配置了build脚本
+        env:
+          BASE_URL: / # 设置基路径为仓库名
+
+      - name: Copy index.html for SPA support
+        run: cp ${{ env.BUILD_DIR }}/index.html ${{ env.BUILD_DIR }}/404.html
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./${{ env.BUILD_DIR }}
