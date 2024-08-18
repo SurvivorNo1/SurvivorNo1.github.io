@@ -16,10 +16,11 @@ jobs:
     - name: Set up SSH
       run: |
         mkdir -p ~/.ssh
-        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
-        ssh-keyscan -H ${{ secrets.REMOTE_HOST_IP }} >> ~/.ssh/known_hosts
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa || { echo "Failed to write SSH key"; exit 1; }
+        chmod 600 ~/.ssh/id_rsa || { echo "Failed to set permissions"; exit 1; }
+        ssh-keyscan -p ${{ secrets.SSH_PORT }} -H ${{ secrets.REMOTE_HOST_IP }} >> ~/.ssh/known_hosts || { echo "Failed to add host"; exit 1; }
 
     - name: Execute script on remote host
       run: |
-        ssh -o StrictHostKeyChecking=no root@${{ secrets.REMOTE_HOST_IP }} 'cd /root/scripts && bash ./deploy.sh'
+        ssh -o StrictHostKeyChecking=no -p ${{ secrets.SSH_PORT }} root@${{ secrets.REMOTE_HOST_IP }} 'cd /root/scripts && bash ./deploy.sh'
+
