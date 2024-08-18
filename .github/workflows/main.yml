@@ -10,6 +10,7 @@ on:
 env:
   BUILD_DIR: dist # 定义全局变量
 
+
 jobs:
   build-and-test-for-ghpages:
     runs-on: ubuntu-latest
@@ -39,3 +40,15 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./${{ env.BUILD_DIR }}
+          
+      - name: Install SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan ${{ secrets.REMOTE_HOST_IP }} >> ~/.ssh/known_hosts
+
+      - name: Pull branch from remote host
+        run: |
+          ssh root@${{ secrets.REMOTE_HOST_IP }} 'cd /root/scripts && bash ./deploy.sh'
+

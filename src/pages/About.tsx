@@ -22,21 +22,19 @@ const About: React.FC = () => {
       </p>
       <h2 className="text-2xl font-bold mb-2 mt-2">Education</h2>
       <ul
-        className="list-disc list-inside text-lg whitespace-pre"
+        className="list-disc list-inside text-lg  break-words "
         style={fontstyle}
       >
         <li>
-          2024.09 - Present, M.E. in Computer Science, National University of
-          Defense Technology(NUDT)
+          2024.09 - Present, M.E. in Computer Science, National University of Defense Technology(NUDT)
         </li>
         <li>
-          2020.09 - 2024.06, B.E. in Computer Science, Southwest Jiaotong
-          University(SWJTU)
+          2020.09 - 2024.06, B.E. in Computer Science, Southwest Jiaotong University(SWJTU)
         </li>
       </ul>
       <h2 className="text-2xl font-bold mt-2 mb-2">Honors and Awards</h2>
       <ul
-        className="list-disc list-inside text-lg whitespace-pre"
+        className="list-disc list-inside text-lg break-words"
         style={fontstyle}
       >
         <li>2021 & 2022, National Scholarship (0.2%)</li>

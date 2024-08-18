@@ -29,6 +29,14 @@ const Layout: React.FC = () => {
             Blogs
           </Link>
           <a
+            href="https://chat.survivorno1.xyz/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:underline"
+          >
+            AI Assistant
+          </a>
+          <a
             href="https://github.com/SurvivorNo1"
             target="_blank"
             rel="noopener noreferrer"
@@ -76,7 +84,7 @@ const Layout: React.FC = () => {
           <p className="text-black mt-2 text-sm">Location: Changsha, China</p>
         </div>
         {/* 内容部分 */}
-        <div className="p-4 md:w-2/4">
+        <div className="p-4 md:w-3/5">
           <main className="h-full">
             <Outlet />
           </main>
