@@ -1,0 +1,25 @@
+name: Deploy to Remote Host
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ secrets.REMOTE_HOST_IP }} >> ~/.ssh/known_hosts
+
+    - name: Execute script on remote host
+      run: |
+        ssh -o StrictHostKeyChecking=no root@${{ secrets.REMOTE_HOST_IP }} 'cd /root/scripts && bash ./deploy.sh'
