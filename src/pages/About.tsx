@@ -11,12 +11,11 @@ const About: React.FC = () => {
       <p className="leading-relaxed text-lg" style={fontstyle}>
         I am currently pursuing a Master’s degree in Computer Science at the
         School of Computer Science, National University of Defense Technology
-        (NUDT), with a focus on high-performance computing (HPC) for machine
-        learning applications. I obtained my Bachelor of Engineering degree in
+        (NUDT), focusing on machine learning applications. I obtained my Bachelor of Engineering degree in
         Computer Science from the School of Computer and Artificial Intelligence
         at Southwest Jiaotong University (SWJTU).
         <br></br>
-        My interests also include CPU and GPU architecture. If you’re open to
+        My interests also include high performance computing. If you’re open to
         discussing academic interests or exploring collaboration opportunities,
         please feel free to contact me at liuyunjay AT gmail DOT com.
       </p>
