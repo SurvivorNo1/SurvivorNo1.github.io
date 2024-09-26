@@ -1,10 +1,11 @@
 name: Deploy to Remote Host
 
 on:
-  push:
-    branches:
-      - main
-
+  workflow_run:
+    workflows: ["Vite.js CI"]
+    types:
+      - completed
+      
 jobs:
   deploy:
     runs-on: ubuntu-latest
