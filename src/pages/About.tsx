@@ -8,6 +8,7 @@ const About: React.FC = () => {
   return (
     <div className="flex flex-col flex-1">
       <h2 className="text-2xl font-bold mb-2">About Me</h2>
+      <div className="max-w-3xl p-1 overflow-hidden">
       <p className="leading-relaxed text-lg" style={fontstyle}>
         I am currently pursuing a Master’s degree in Computer Science at the
         School of Computer Science, National University of Defense Technology
@@ -19,6 +20,7 @@ const About: React.FC = () => {
         discussing academic interests or exploring collaboration opportunities,
         please feel free to contact me at liuyunjay AT gmail DOT com.
       </p>
+      </div>
       <h2 className="text-2xl font-bold mb-2 mt-2">Education</h2>
       <ul
         className="list-disc list-inside text-lg  break-words "
