@@ -2,12 +2,12 @@ import React from 'react';
 import { useEffect, useState } from 'react';
 import { Link, Outlet } from 'react-router-dom';
 const Layout: React.FC = () => {
-  const your_own_domain = "https://survivorno1.xyz";
-
+  // with dash in the domain name
+  const your_own_domain = 'https://survivorno1.xyz/';
   const textShadowStyle = {
     textShadow: '3px 3px 3px rgba(0, 0, 0, 0.4)',
   };
-  const [currentUrl, setCurrentUrl] = useState("");
+  const [currentUrl, setCurrentUrl] = useState('');
 
   useEffect(() => {
     setCurrentUrl(window.location.href);
