@@ -2,7 +2,7 @@ import React from 'react';
 import { useEffect, useState } from 'react';
 import { Link, Outlet } from 'react-router-dom';
 const Layout: React.FC = () => {
-  // with dash in the domain name
+  // with backslash at the end
   const your_own_domain = 'https://survivorno1.xyz/';
   const textShadowStyle = {
     textShadow: '3px 3px 3px rgba(0, 0, 0, 0.4)',
