@@ -1,25 +1,28 @@
 {
-  "blogs": {
-      "2024": [
-          {
-              "path": "/assets/blogs/2024/catalan.html",
-              "description": "Catalan Numbers"
-          }
-      ]
-  },
-  "photos": {
-      "2024": [
-          {
-              "path": "/assets/photos/2024/mmexport1722745241226.jpg",
-              "description": "Giant Panda at Chengdu"
-          },
-          {
-              "path": "/assets/photos/2024/mmexport1723459455989.jpg",
-              "description": "I've graduated from SWJTU, woohoo!"
-          }
-      ]
-  },
-  "publications": {
-
-  }
+    "blogs": {
+        "2024": [
+            {
+                "path": "/assets/blogs/2024/Multi-GPU-Training.html",
+                "description": "Multi-GPU Training"
+            }
+        ]
+    },
+    "photos": {
+        "2024": [
+            {
+                "path": "/assets/photos/2024/her.jpg",
+                "description": "My loving girlfriend"
+            },
+            {
+                "path": "/assets/photos/2024/mmexport1723459455989.jpg",
+                "description": "I've graduated from SWJTU, woohoo!"
+            },
+            {
+                "path": "/assets/photos/2024/mmexport1722745241226.jpg",
+                "description": "Giant Panda at Chengdu"
+            }
+        ]
+    },
+    "publications": {
+    }
 }
