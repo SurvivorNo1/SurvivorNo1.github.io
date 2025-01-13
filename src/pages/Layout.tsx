@@ -91,7 +91,7 @@ const Layout: React.FC = () => {
           />
           <p className="text-lg font-bold">Yunjie Liu </p>
           <p className="ml-2 mt-1 font-light text-sm">Think Twice Code Once</p>
-          <p className="mt-2 text-black text-sm">A Master Student @ NUDT</p>
+          <p className="mt-2 text-black text-sm">A Master Student in CS</p>
           <p className="text-black mt-2 text-sm">Location: Changsha, China</p>
         </div>
         <div className="p-4 md:w-3/5">
