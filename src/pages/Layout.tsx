@@ -37,6 +37,9 @@ const Layout: React.FC = () => {
           <Link to="/blogs" className="text-blue-600 hover:underline">
             Blogs
           </Link>
+          <Link to="/comment" className="text-blue-600 hover:underline">
+            Comment
+          </Link>
           <a
             href="https://chat.survivorno1.xyz/"
             target="_blank"

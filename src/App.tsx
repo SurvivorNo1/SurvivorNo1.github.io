@@ -4,6 +4,7 @@ import Photos from './pages/Photos';
 import Publications from './pages/Publications';
 import Blogs from './pages/Blogs';
 import Layout from './pages/Layout';
+import Comment from './pages/Comment';
 import './App.css';
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
           <Route path="publications" element={<Publications />} />
           <Route path="photos" element={<Photos />} />
           <Route path="blogs" element={<Blogs />} />
+          <Route path="comment" element={<Comment />}/>
           <Route path="*" element={<About />} />
         </Route>
       </Routes>
