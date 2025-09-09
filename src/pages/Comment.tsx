@@ -8,7 +8,7 @@ const Comment: React.FC = () => {
           repoId="R_kgDOMimmbQ"
           category="Announcements"
           categoryId="DIC_kwDOMimmbc4CvLy_"
-          mapping="pathname"
+          mapping="title"
           strict="0"
           reactionsEnabled="1"
           emitMetadata="0"
