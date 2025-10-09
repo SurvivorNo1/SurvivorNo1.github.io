@@ -25,7 +25,7 @@ const About: React.FC = () => {
         style={fontstyle}
       >
         <li>
-          2024.09 - Present , M.E. in Computer Science,National University of Defense Technology
+          2024.09 - Present , M.S. in Computer Science,National University of Defense Technology
         </li>
         <li>
           2020.09 - 2024.06, B.E. in Computer Science, Southwest Jiaotong University, 
