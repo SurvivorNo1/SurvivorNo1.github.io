@@ -10,7 +10,7 @@ const About: React.FC = () => {
       <h2 className="text-2xl font-bold mb-2">About Me</h2>
       <div className="max-w-3xl p-1 overflow-hidden">
         <p className="leading-relaxed text-lg" style={fontstyle}>
-        I am a Master's student in Computer Science at the National University of Defense Technology (NUDT), where my research focuses on long-tail learning and dataset distillation. I received my Bachelor's degree in Engineering, majoring in Computer Science, from the School of Computer and Artificial Intelligence at Southwest Jiaotong University (SWJTU).
+        I am a Master's student in Computer Science at the National University of Defense Technology (NUDT), where my research focuses on long-tail learning. I received my Bachelor's degree in Engineering, majoring in Computer Science, from the School of Computer and Artificial Intelligence at Southwest Jiaotong University (SWJTU).
         <br></br>
         
         My interests include machine learning and electronic DIY. During my undergraduate years, I worked on several projects involving smart car design and programming, which sparked my lasting passion for embedded systems and hands-on development.
@@ -52,10 +52,14 @@ const About: React.FC = () => {
             target="_blank"
             className="ml-2 text-blue-500 hover:underline"
           >
-            First prize
+            First Prize
           </a>
         </li>
-        <li>2024, 7th Military Modeling Competition, Second Prize</li>
+        <li>2024, 8th Military Modeling Competition, Second Prize</li>
+        <li>
+          2025, 'HUAWEI Cup' 22nd China Post-Graduate Mathematical Contest in
+          Modeling, Second Prize (Top 13.66%)
+        </li>
       </ul>
     </div>
   );
