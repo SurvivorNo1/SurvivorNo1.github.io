@@ -1,6 +1,7 @@
 name: Deploy to Remote Host
 
 on:
+  workflow_dispatch: 
   workflow_run:
     workflows: ["Vite.js CI"]
     types:
