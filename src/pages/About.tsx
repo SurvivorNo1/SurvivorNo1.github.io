@@ -28,12 +28,7 @@ const About: React.FC = () => {
           2024.09 - Present , M.S. in Computer Science,National University of Defense Technology
         </li>
         <li>
-          2020.09 - 2024.06, B.E. in Computer Science, Southwest Jiaotong University, 
-          <a
-            href="https://scai.swjtu.edu.cn/web/download?m=downLoad&fid=f0074670-6ce1-4711-b186-b288e40684b3"
-            target="_blank"
-            className="ml-2 text-blue-500 hover:underline"
-          >Ranked 1st</a>
+          2020.09 - 2024.06, B.E. in Computer Science, Southwest Jiaotong University, Ranked 1st
         </li>
       </ul>
       <h2 className="text-2xl font-bold mt-2 mb-2">Honors and Awards</h2>
