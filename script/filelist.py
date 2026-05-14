@@ -86,10 +86,11 @@ if __name__ == "__main__":
         print("File does not exist")
         json_data = {"blogs": {}, "photos": {}, "publications": {}}
     else:
-        json_data = open(path, "r")
-        json_data = json.load(json_data)
+        # 考虑中文
+        with open(path, "r", encoding="utf-8") as json_file:
+            json_data = json.load(json_file)
     
     json_data = update_filepath(json_data)
     
-    with open("filelist.json", "w") as f:
-        json.dump(json_data, f, indent=4)
+    with open("filelist.json", "w", encoding="utf-8") as f:
+        json.dump(json_data, f, indent=4, ensure_ascii=False)

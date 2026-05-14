@@ -5,6 +5,16 @@
                 "path": "/assets/blogs/2024/Multi-GPU-Training.html",
                 "description": "Multi-GPU Training"
             }
+        ],
+        "2026": [
+            {
+                "path": "/assets/blogs/2026/backend-textbook.html",
+                "description": "后端开发教程"
+            },
+            {
+                "path": "/assets/blogs/2026/leetcode_top100.html",
+                "description": "leetcode hot 100速览"
+            }
         ]
     },
     "photos": {
@@ -24,5 +34,11 @@
         ]
     },
     "publications": {
+        "2023": [
+            {
+                "path": "/assets/publications/2023/CSISIAC2023.json",
+                "description": ""
+            }
+        ]
     }
 }
