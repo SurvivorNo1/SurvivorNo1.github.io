@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Text2SQL 领域后训练技术报告</title>
+<meta name="description" content="Qwen3-8B 在 BIRD 上的领域后训练：可验证蒸馏、全参数监督微调与直接偏好优化。">
+<style>
+:root{
+  --bg:#ffffff;
+  --panel:#f7f8f9;
+  --fg:#22262b;
+  --fg-strong:#0d1013;
+  --muted:#666e78;
+  --rule:#d9dee3;
+  --rule-strong:#9aa3ac;
+  --accent:#12536b;
+  --accent-weak:#eaf2f5;
+  --code-bg:#f4f6f8;
+  --serif: Charter, "Bitstream Charter", "Source Serif 4", "Source Serif Pro", Georgia, "Times New Roman", "Songti SC", "Noto Serif CJK SC", serif;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", Roboto, Helvetica, Arial, sans-serif;
+  --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, "Courier New", monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#15181b;
+    --panel:#1c2126;
+    --fg:#dfe3e7;
+    --fg-strong:#f2f5f7;
+    --muted:#98a2ac;
+    --rule:#333a41;
+    --rule-strong:#5c666f;
+    --accent:#7cc0d8;
+    --accent-weak:#1b2c34;
+    --code-bg:#1b2025;
+  }
+}
+*{box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--fg);
+  font-family:var(--sans);
+  font-size:16px;
+  line-height:1.75;
+}
+.wrap{max-width:840px;margin:0 auto;padding:0 22px 96px;}
+
+/* ---------- 标题区 ---------- */
+header.title{
+  text-align:center;
+  padding:64px 0 34px;
+  border-bottom:1px solid var(--rule);
+  margin-bottom:38px;
+}
+header.title h1{
+  font-family:var(--serif);
+  font-weight:700;
+  font-size:2.15rem;
+  line-height:1.35;
+  letter-spacing:.01em;
+  color:var(--fg-strong);
+  margin:0 0 14px;
+}
+header.title .sub{
+  font-family:var(--serif);
+  font-size:1.06rem;
+  color:var(--muted);
+  margin:0 auto 22px;
+  max-width:640px;
+  line-height:1.6;
+}
+header.title .byline{font-size:.95rem;color:var(--fg);margin-bottom:4px;}
+header.title .meta{font-size:.86rem;color:var(--muted);}
+.badges{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:24px;}
+.badge{
+  border:1px solid var(--rule-strong);
+  border-radius:2px;
+  padding:5px 12px;
+  font-size:.84rem;
+  color:var(--fg);
+  background:var(--panel);
+  font-variant-numeric:tabular-nums;
+}
+.badge b{color:var(--accent);font-weight:700;}
+
+/* ---------- 正文 ---------- */
+h2{
+  font-family:var(--serif);
+  font-size:1.36rem;
+  color:var(--fg-strong);
+  margin:52px 0 14px;
+  padding-bottom:6px;
+  border-bottom:1px solid var(--rule);
+  line-height:1.4;
+}
+h3{
+  font-family:var(--serif);
+  font-size:1.08rem;
+  color:var(--fg-strong);
+  margin:32px 0 10px;
+}
+p{margin:0 0 15px;}
+ul,ol{margin:0 0 15px;padding-left:1.5em;}
+li{margin:6px 0;}
+a{color:var(--accent);}
+b,strong{color:var(--fg-strong);font-weight:700;}
+.lead{font-size:1.02rem;}
+.math{
+  font-family:var(--serif);
+  font-size:1.02rem;
+  text-align:center;
+  margin:16px 0;
+  padding:12px 14px;
+  background:var(--panel);
+  border-top:1px solid var(--rule);
+  border-bottom:1px solid var(--rule);
+  overflow-x:auto;
+  line-height:1.9;
+}
+.math i{font-style:italic;}
+.math .mut{font-size:.86rem;color:var(--muted);font-family:var(--sans);}
+.note{
+  border-left:3px solid var(--rule-strong);
+  background:var(--panel);
+  padding:12px 16px;
+  margin:20px 0;
+  font-size:.94rem;
+  color:var(--muted);
+}
+.note b{color:var(--fg-strong);}
+.abstract{
+  background:var(--panel);
+  border:1px solid var(--rule);
+  padding:20px 24px;
+  margin:0 0 12px;
+}
+.abstract .h{
+  font-family:var(--serif);
+  font-weight:700;
+  color:var(--fg-strong);
+  letter-spacing:.08em;
+  font-size:.9rem;
+  margin-bottom:8px;
+}
+.abstract p{margin:0;font-size:.97rem;}
+
+/* ---------- 表格 ---------- */
+.tab{margin:26px 0 30px;}
+.tab .cap{
+  font-size:.9rem;
+  color:var(--fg);
+  margin-bottom:8px;
+  line-height:1.6;
+}
+.tab .cap b{font-family:var(--serif);}
+.tab-wrap{overflow-x:auto;}
+table{
+  border-collapse:collapse;
+  width:100%;
+  min-width:520px;
+  font-size:.88rem;
+  font-variant-numeric:tabular-nums;
+}
+table th,table td{
+  padding:7px 10px;
+  text-align:left;
+  vertical-align:top;
+  line-height:1.55;
+}
+table thead th{
+  border-top:1.6px solid var(--rule-strong);
+  border-bottom:1px solid var(--rule-strong);
+  font-weight:600;
+  color:var(--fg-strong);
+  white-space:nowrap;
+}
+table tbody tr:last-child td{border-bottom:1.6px solid var(--rule-strong);}
+table td{border-bottom:none;}
+table tbody tr td{border-top:none;}
+table .num{text-align:right;white-space:nowrap;}
+table .ctr{text-align:center;}
+table tr.sep td,table tr.sep th{border-top:1px solid var(--rule);}
+table tr.hl td{background:var(--accent-weak);}
+.small{font-size:.84rem;color:var(--muted);}
+.neg{color:var(--muted);}
+
+/* ---------- 图 ---------- */
+figure{margin:30px 0;}
+.fig-wrap{overflow-x:auto;}
+figure svg{display:block;width:100%;min-width:600px;height:auto;color:var(--fg);}
+figure svg text{fill:var(--fg);font-family:var(--sans);}
+figure svg text.mut{fill:var(--muted);}
+figure svg text.acc{fill:var(--accent);}
+figure svg .box{fill:var(--panel);stroke:var(--rule-strong);stroke-width:1;}
+figure svg .box-acc{fill:var(--accent-weak);stroke:var(--accent);stroke-width:1.4;}
+figure svg .arw{stroke:var(--rule-strong);stroke-width:1.4;fill:none;}
+figure svg .arw-h{fill:var(--rule-strong);}
+figure svg .dash{stroke:var(--rule-strong);stroke-width:1;stroke-dasharray:4 4;fill:none;}
+figure svg .axis{stroke:var(--rule-strong);stroke-width:1;}
+figure svg .grid{stroke:var(--rule);stroke-width:1;}
+figure svg .bar{fill:var(--rule-strong);}
+figure svg .bar-soft{fill:var(--accent);fill-opacity:.22;stroke:var(--accent);stroke-width:1;}
+figure svg .bar-acc{fill:var(--accent);}
+figure svg .dot{fill:var(--muted);}
+figure svg .dot-acc{fill:var(--accent);}
+figcaption{
+  font-size:.9rem;
+  color:var(--fg);
+  margin-top:10px;
+  line-height:1.6;
+}
+figcaption b{font-family:var(--serif);}
+
+/* ---------- 代码 ---------- */
+pre{
+  background:var(--code-bg);
+  border:1px solid var(--rule);
+  padding:14px 16px;
+  overflow-x:auto;
+  font-family:var(--mono);
+  font-size:.83rem;
+  line-height:1.65;
+  margin:18px 0;
+  color:var(--fg);
+}
+code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 4px;border:1px solid var(--rule);}
+pre code{background:none;border:none;padding:0;}
+
+footer{
+  margin-top:64px;
+  padding-top:18px;
+  border-top:1px solid var(--rule);
+  font-size:.84rem;
+  color:var(--muted);
+}
+@media (max-width:600px){
+  header.title{padding:44px 0 28px;}
+  header.title h1{font-size:1.62rem;}
+  body{font-size:15px;}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="title">
+  <h1>面向真实业务数据库的 Text2SQL 领域后训练</h1>
+  <p class="sub">可验证蒸馏、全参数监督微调与直接偏好优化在 Qwen3-8B 上的实证研究</p>
+  <div class="byline">刘云杰</div>
+  <div class="meta">个人独立实验项目 · 公开基准 BIRD / Spider · 校级 GPU 集群 · 2026 年 8 月 19 日 – 8 月 30 日</div>
+  <div class="badges">
+    <span class="badge">BIRD 开发集执行准确率 <b>46.68% → 65.45%</b></span>
+    <span class="badge">纯模型 · 单次推理 · 无推理期流水线</span>
+    <span class="badge">全量 1534 题真实执行评测</span>
+  </div>
+</header>
+
+<section class="abstract">
+  <div class="h">摘要</div>
+  <p>教师模型生成的推理链与 SQL 经真实数据库执行验证，保留 5783 条用于 Qwen3-8B 全参数监督微调；再由微调模型自采样构造 7989 对偏好数据做偏好对齐。BIRD 开发集全量 1534 题执行准确率由 46.68% 升至 65.45%，收益全部固化在权重内，推理为单次调用、无流水线。</p>
+</section>
+
+<h2>1. 项目背景</h2>
+
+<p class="lead">自然语言取数是商业智能（Business Intelligence, BI）场景中的一类垂直指令任务：用户用中文或英文提问，系统需要在给定数据库上生成一条能真正跑出正确结果的 SQL。它与通用对话任务的差别在于，正确与否可以被<b>客观判定</b>——把 SQL 放到真实数据库里执行，与标准答案的结果集比对即可，无需人工标注，也无需大模型评判。</p>
+
+<p>立项前先测了两件事，用来判断这个题目值不值得投入算力。</p>
+
+<p><b>第一，基座模型确实不够用。</b>Qwen3-8B 在 BIRD 开发集（11 个真实业务库、1534 题）上零样本直出 SQL 的执行准确率（Execution Accuracy, EX）只有 <b>46.68%</b>，语法有效率 84.22%。这些库不是玩具库：<code>financial</code>（银行交易，8 表 68 MB）、<code>thrombosis_prediction</code>（医院检验，3 表 64 列）、<code>european_football_2</code>（570 MB）。</p>
+
+<p><b>第二，提示词工程能把分数拉高，但代价不可接受。</b>系统做了十余组免训练消融（表 1）。最强的可部署免训练配置是「打开原生思考模式 + 用标准建表语句表示 schema」，执行准确率 <b>59.97%</b>，但同一张 A100 上跑完 1534 题需要 1048.7 秒，是基准配置的 <b>19.5 倍</b>（成本细节见第 8 节）。商业智能取数是交互式场景，用户不会为一次取数等 20 倍延迟。</p>
+
+<div class="tab">
+  <div class="cap"><b>表 1：</b>免训练消融的关键结果（BIRD 开发集全量 1534 题，配对麦克尼马尔精确检验）。A0 为全项目基线。</div>
+  <div class="tab-wrap">
+  <table>
+    <thead>
+      <tr><th>编号</th><th>配置</th><th class="num">执行准确率</th><th class="num">语法有效率</th><th class="num">Δ</th><th class="num">p 值</th><th>判定</th></tr>
+    </thead>
+    <tbody>
+      <tr class="hl"><td>A0</td><td>基准（M-Schema + 3 个样例值 + 外部知识 + 直出 SQL + 0 示例）</td><td class="num">46.68%</td><td class="num">84.22%</td><td class="num">—</td><td class="num">—</td><td>全项目基线</td></tr>
+      <tr><td>A2</td><td>schema 退化为简化列清单</td><td class="num">41.20%</td><td class="num">81.68%</td><td class="num">−5.48</td><td class="num">5.9e-07</td><td>显著变差</td></tr>
+      <tr><td>A3</td><td>去掉每列样例值</td><td class="num">42.57%</td><td class="num">84.03%</td><td class="num">−4.11</td><td class="num">1.6e-05</td><td>显著变差</td></tr>
+      <tr><td>A4</td><td>去掉外部知识提示</td><td class="num">35.53%</td><td class="num">84.88%</td><td class="num">−11.15</td><td class="num">1.9e-23</td><td>单因子影响最大</td></tr>
+      <tr><td>A5</td><td>加 3 条示例</td><td class="num">43.94%</td><td class="num">81.81%</td><td class="num">−2.74</td><td class="num">0.0094</td><td>反直觉：显著变差</td></tr>
+      <tr><td>A6</td><td>提示词要求先写推理再出 SQL</td><td class="num">50.98%</td><td class="num">87.09%</td><td class="num">+4.30</td><td class="num">1.2e-05</td><td>推理链有效</td></tr>
+      <tr><td>B0</td><td>原生思考模式（预算 8192）</td><td class="num">59.06%</td><td class="num">94.92%</td><td class="num">+12.39</td><td class="num">1.1e-25</td><td>有效，成本高</td></tr>
+      <tr class="hl"><td>B1</td><td>原生思考模式 + 建表语句 schema</td><td class="num">59.97%</td><td class="num">96.61%</td><td class="num">+13.30</td><td class="num">2e-27</td><td>最强可部署免训练配置</td></tr>
+      <tr><td>B2</td><td>预言机 schema 链接（读标准答案选表）</td><td class="num">62.58%</td><td class="num">95.24%</td><td class="num">+15.91</td><td class="num">3.9e-37</td><td>上界诊断，<b>不可部署</b></td></tr>
+      <tr><td>B4</td><td>思考模式但去掉外部知识</td><td class="num">47.52%</td><td class="num">93.81%</td><td class="num">+0.85</td><td class="num">0.541</td><td><span class="neg">不显著，不能引用</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="note">
+  <b>一处必须交代的缺陷与修复。</b>思考模式的首轮实验（编号 A7）把推理链和答案放在同一个 2048 token 预算里，导致 12.4% 的输出带未闭合的 <code>&lt;think&gt;</code> 标签、12.5% 完全抠不到 SQL，分数被系统性低估。发现后<b>同配置重跑全量 1534 题</b>（B 系列），A7 的结果整体作废但结果文件保留作为证据。基线 A0 与后续所有微调模型都是直出或短推理，输出中位数仅 308 token，不受此缺陷影响。同一类缺陷后来在教师模型上又出现了一次（第 5.1 节）。
+</div>
+
+<p>此外，两项前置诊断否掉了原方案里的一条支线：BIRD 开发集平均只有 <b>6.8 张表</b>、提示词长度中位数 <b>2544 token</b>，词面 schema 链接只省下约 4% 的 token 却带来 1.3% 的漏表率，因此<b>砍掉 schema 链接</b>，只保留预言机链接作为上界诊断。基座模型上每题采样 8 条按结果集聚类投票只有 47.91%（p=0.427，不显著），而「8 次中至少对一次」为 51.76%——采样上界过低，说明<b>强化学习必须排在监督微调之后</b>。</p>
+
+<h2>2. 任务目标</h2>
+
+<p>目标是<b>只优化模型自身</b>，把上述提示词工程能拿到的收益固化进 80 亿参数的权重里，使模型在单次推理下达到甚至超过免训练最强配置的精度，同时把推理成本拉回可交互的量级。</p>
+
+<h3>2.1 输入与输出</h3>
+
+<pre><code>输入 = 自然语言问题
+     + 数据库 schema（M-Schema 表示：表名、列名、类型、主键，
+                      每列附 3 个去重后的真实样例值）
+     + 外部知识提示（BIRD 的 evidence 字段，90.4% 的题目带有）
+
+输出 = 推理过程 + 一条可直接在该数据库上执行的 SQL</code></pre>
+
+<h3>2.2 约束</h3>
+<ul>
+  <li><b>只优化模型本身</b>：所有提升必须固化在一份 8B 权重里，不引入检索器、选择器、投票器等外部组件。</li>
+  <li><b>单次推理</b>：头条数字只取贪心解码、一次调用的结果；多轮重试、多次采样投票即使有效也单独报告，不并入主线（第 7.5 节）。</li>
+  <li><b>评测口径统一且不可事后调整</b>：主指标为执行准确率，真实执行 SQL 并按 BIRD 官方的结果集集合语义比对；全量 1534 题不抽样；所有提升做配对麦克尼马尔精确检验（McNemar's exact test）与配对自助法 95% 置信区间；<b>p ≥ 0.05 的结果显式标注为不可引用</b>；零人工标注、零大模型评判。</li>
+</ul>
+
+<h3>2.3 形式化定义</h3>
+
+<p><b>任务。</b>给定自然语言问题 <i>q</i>、数据库模式 <i>S</i> = {<i>T</i><sub>1</sub>, …, <i>T</i><sub>m</sub>}（每张表含列名、类型、主外键与若干真实样例值）以及外部知识提示 <i>e</i>，模型 <i>π<sub>θ</sub></i> 需生成一条 SQL 查询 <i>y</i>：</p>
+
+<div class="math"><i>y</i> ~ <i>π<sub>θ</sub></i>( · | <i>x</i> ),&nbsp;&nbsp;&nbsp; <i>x</i> = Prompt( <i>q</i>, <i>S</i>, <i>e</i> )</div>
+
+<p><b>评价函数。</b>设 <i>D</i> 为目标数据库，Exec(<i>y</i>, <i>D</i>) 为执行 <i>y</i> 得到的结果集，<i>y</i><sup>★</sup> 为标注 SQL。执行匹配的指示函数定义为</p>
+
+<div class="math">𝟙<sub>EX</sub>(<i>y</i>) = 1，当且仅当 Set( Exec(<i>y</i>, <i>D</i>) ) = Set( Exec(<i>y</i><sup>★</sup>, <i>D</i>) )；否则为 0<br>
+<span class="mut">（执行报错、超时均计为 0）</span></div>
+
+<p>执行准确率即该指示函数在评测集上的均值：EX = (1/<i>N</i>) Σ<sub><i>i</i></sub> 𝟙<sub>EX</sub>(<i>y<sub>i</sub></i>)。采用集合语义而非逐行比较，与 BIRD 官方口径一致，代价是对行序不敏感（见第 9.4 节）。</p>
+
+<p><b>优化目标与约束。</b></p>
+
+<div class="math">max<sub><i>θ</i></sub>&nbsp; E<sub>(<i>q</i>,<i>S</i>,<i>e</i>)</sub> [ 𝟙<sub>EX</sub>(<i>y</i>) ]&nbsp;&nbsp;&nbsp; s.t. <i>y</i> ~ <i>π<sub>θ</sub></i>( · | <i>x</i> )，单次采样，|<i>θ</i>| = 8 × 10<sup>9</sup></div>
+
+<p>约束的实质含义是：不允许多次采样投票、不允许执行反馈重试、不允许外部检索或流水线编排，<b>所有性能提升必须体现在权重 θ 内</b>。</p>
+
+<p><b>可验证蒸馏。</b>设教师模型 <i>π<sub>T</sub></i> 对训练问题 <i>x<sub>i</sub></i> 生成推理过程与查询 (<i>c<sub>i</sub></i>, <i>y<sub>i</sub></i>)。构造训练集时施加执行一致性约束：</p>
+
+<div class="math"><i>D</i><sub>SFT</sub> = { (<i>x<sub>i</sub></i>, <i>c<sub>i</sub></i>, <i>y<sub>i</sub></i>) : 𝟙<sub>EX</sub>(<i>y<sub>i</sub></i>) = 1 }</div>
+
+<p>与常规思维链蒸馏 <i>D</i> = {(<i>x<sub>i</sub></i>, <i>c<sub>i</sub></i>, <i>y<sub>i</sub></i>)} 的区别在于：过滤信号来自<b>环境执行结果</b>而非模型自评，因而能够识别「语法正确、逻辑自洽、但答非所问」的样本。监督目标为自回归交叉熵，且<b>仅在回答段计算损失</b>：</p>
+
+<div class="math">L<sub>SFT</sub>(<i>θ</i>) = − Σ<sub><i>t</i> ∈ Ans</sub> log <i>π<sub>θ</sub></i>( <i>z<sub>t</sub></i> | <i>z</i><sub>&lt;<i>t</i></sub> )</div>
+
+<p>其中 Ans 为回答段的 token 下标集合。提示词段（数据库模式约 2500 token）占序列的绝大部分，实测参与损失的 token 仅占 15.50%；若不做掩码，损失将主要由「复述数据库模式」贡献。</p>
+
+<p><b>偏好优化。</b>以监督微调后的模型对每个训练问题采样 <i>K</i> = 16 条候选，按执行结果划分为正例集与负例集：</p>
+
+<div class="math"><i>Y</i><sup>+</sup><sub><i>i</i></sub> = { <i>y</i> : 𝟙<sub>EX</sub>(<i>y</i>) = 1 }，&nbsp;&nbsp; <i>Y</i><sup>−</sup><sub><i>i</i></sub> = { <i>y</i> : 𝟙<sub>EX</sub>(<i>y</i>) = 0 }</div>
+
+<p>仅当两个集合均非空时该问题可用（实测可用率 28.54%）。正例取执行正确者中最短的一条；<b>负例的选取方式是本项目的对照变量</b>：</p>
+
+<div class="math"><i>y</i><sup>−</sup><sub>相似</sub> = arg max<sub><i>y</i> ∈ <i>Y</i><sup>−</sup></sub> sim( <i>y</i>, <i>y</i><sup>+</sup> )，&nbsp;&nbsp; <i>y</i><sup>−</sup><sub>相异</sub> = arg min<sub><i>y</i> ∈ <i>Y</i><sup>−</sup></sub> sim( <i>y</i>, <i>y</i><sup>+</sup> )</div>
+
+<p>直接偏好优化的损失如下，其中参考模型 <i>π</i><sub>ref</sub> 取<b>监督微调后的模型而非原始基座</b>（理由见第 6.2 节），对数似然同样只在回答段累加：</p>
+
+<div class="math">L<sub>DPO</sub> = − log <i>σ</i> ( <i>β</i> [ log <i>π<sub>θ</sub></i>(<i>y</i><sup>+</sup>|<i>x</i>) / <i>π</i><sub>ref</sub>(<i>y</i><sup>+</sup>|<i>x</i>) − log <i>π<sub>θ</sub></i>(<i>y</i><sup>−</sup>|<i>x</i>) / <i>π</i><sub>ref</sub>(<i>y</i><sup>−</sup>|<i>x</i>) ] )</div>
+
+<h2>3. 流水线总览</h2>
+
+<p>整条链路是：<b>基座模型 → 可验证蒸馏构造数据 → 全参数监督微调（Supervised Fine-Tuning, SFT）→ 直接偏好优化（Direct Preference Optimization, DPO）→ 执行式评测</b>。每一步的产出与关键数字见图 1。</p>
+
+<figure>
+  <div class="fig-wrap">
+  <svg viewBox="0 0 880 310" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="流水线总览：基座、数据构造、监督微调、偏好优化与评测">
+    <defs>
+      <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" class="arw-h"/>
+      </marker>
+    </defs>
+
+    <!-- 教师模型 -->
+    <rect class="box" x="228" y="10" width="176" height="44" rx="2"/>
+    <text x="316" y="30" text-anchor="middle" font-size="13" font-weight="600">教师 DeepSeek-V4-pro</text>
+    <text x="316" y="46" text-anchor="middle" font-size="12" class="mut">自身执行准确率 60.67%</text>
+    <path class="arw" d="M 316 54 L 316 96" marker-end="url(#ah)"/>
+
+    <!-- 四个主阶段 -->
+    <rect class="box" x="12" y="100" width="176" height="62" rx="2"/>
+    <text x="100" y="124" text-anchor="middle" font-size="13" font-weight="600">Qwen3-8B 基座</text>
+    <text x="100" y="143" text-anchor="middle" font-size="12" class="mut">零样本直出 SQL</text>
+    <text x="100" y="180" text-anchor="middle" font-size="13" class="acc" font-weight="600">46.68%</text>
+
+    <rect class="box" x="228" y="100" width="176" height="62" rx="2"/>
+    <text x="316" y="124" text-anchor="middle" font-size="13" font-weight="600">可验证蒸馏</text>
+    <text x="316" y="143" text-anchor="middle" font-size="12" class="mut">执行过滤，9078 → 5783</text>
+    <text x="316" y="180" text-anchor="middle" font-size="12" class="mut">保留率 63.7%</text>
+
+    <rect class="box" x="444" y="100" width="176" height="62" rx="2"/>
+    <text x="532" y="124" text-anchor="middle" font-size="13" font-weight="600">全参数监督微调</text>
+    <text x="532" y="143" text-anchor="middle" font-size="12" class="mut">ZeRO-3，6 卡，推理链监督</text>
+    <text x="532" y="180" text-anchor="middle" font-size="13" class="acc" font-weight="600">59.58%</text>
+
+    <rect class="box-acc" x="660" y="100" width="176" height="62" rx="2"/>
+    <text x="748" y="124" text-anchor="middle" font-size="13" font-weight="600">直接偏好优化</text>
+    <text x="748" y="143" text-anchor="middle" font-size="12" class="mut">自采样 7989 对，最相似负例</text>
+    <text x="748" y="180" text-anchor="middle" font-size="13" class="acc" font-weight="600">65.45%</text>
+
+    <path class="arw" d="M 188 131 L 226 131" marker-end="url(#ah)"/>
+    <path class="arw" d="M 404 131 L 442 131" marker-end="url(#ah)"/>
+    <path class="arw" d="M 620 131 L 658 131" marker-end="url(#ah)"/>
+
+    <!-- 评测底座 -->
+    <path class="dash" d="M 100 196 L 100 232 M 316 196 L 316 232 M 532 196 L 532 232 M 748 196 L 748 232"/>
+    <rect class="box" x="12" y="232" width="824" height="52" rx="2"/>
+    <text x="424" y="254" text-anchor="middle" font-size="13" font-weight="600">执行式评测器：真实连接数据库执行 SQL，按官方结果集语义比对</text>
+    <text x="424" y="272" text-anchor="middle" font-size="12" class="mut">BIRD 开发集全量 1534 题 · 配对麦克尼马尔检验 · 零人工标注、零大模型评判</text>
+  </svg>
+  </div>
+  <figcaption><b>图 1：</b>流水线总览。教师模型只参与训练数据构造，不参与推理；最终交付物是一份 8B 权重，推理时无任何外部组件。图中百分数均为 BIRD 开发集执行准确率。</figcaption>
+</figure>
+
+<h2>4. 报告范围</h2>
+
+<p>本报告只覆盖<b>模型后训练</b>部分：数据构造、训练方法、消融与评测。以下内容<b>不在范围内</b>，本文不作任何声明：</p>
+<ul>
+  <li>前端界面与交互设计（自然语言输入、结果表格展示等）；</li>
+  <li>生产数据库的接入工程（连接管理、权限与脱敏、方言适配）；</li>
+  <li>生产部署与服务化（模型服务编排、并发与弹性、监控告警）。</li>
+</ul>
+<p>评测全部在公开基准（BIRD、Spider）的离线数据库上完成，未接入任何生产系统。</p>
+
+<h2>5. 数据构造：可验证蒸馏</h2>
+
+<h3>5.1 教师模型能力校准</h3>
+
+<p>用教师模型生成数据之前先测教师自己有多强。首次测得执行准确率仅 50.0%，且 <b>24% 的调用完全不输出 SQL</b>。抽查 150 条后定位到与前述 A7 完全同类的缺陷：无 SQL 的 36 条推理链平均 8634 字符，正好顶到 2048 的预算上限，答案 0 字符；有 SQL 的 114 条推理链平均 2827 字符、答案 196 字符。把预算放宽到 8192 后，截断率 24% → 2.67%，教师执行准确率 50.0% → <b>60.67%</b>，语法有效率 96.13%。</p>
+
+<div class="note">
+  这次校准的价值不在于把分数修回来，而在于：<b>被截断的恰好是最难的题</b>。不查就直接用，蒸馏集会系统性缺失难样本，而这种缺失在数据里看不出来——它长得就像「教师答不上来」。
+</div>
+
+<h3>5.2 全量蒸馏与执行过滤</h3>
+
+<p>教师对 BIRD 训练集逐题生成（推理链, SQL），随后<b>在真实数据库上执行，结果集与标准答案一致才入库</b>。9428 题原始数据中，有 350 题的标准答案自身就跑不通（3.7%，无法验证，予以排除并显式报告），可蒸馏基数为 9078 题，最终保留 <b>5783 条（63.70%）</b>。API 用量为提示词 1572 万 token + 生成 415 万 token（其中推理占 94%），120 并发下墙钟 651 秒。</p>
+
+<figure>
+  <div class="fig-wrap">
+  <svg viewBox="0 0 780 330" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="数据构造漏斗：9428 到 9078 到 5783">
+    <!-- 漏斗三层 -->
+    <rect class="box" x="150" y="26" width="520" height="40" rx="2"/>
+    <text x="140" y="51" text-anchor="end" font-size="13">BIRD 训练集</text>
+    <text x="410" y="51" text-anchor="middle" font-size="13" font-weight="600">9428 题</text>
+
+    <text x="150" y="88" font-size="12" class="mut">− 350（3.7%）标准答案自身执行不通过，无法验证，排除并报告</text>
+
+    <rect class="box" x="150" y="98" width="501" height="40" rx="2"/>
+    <text x="140" y="123" text-anchor="end" font-size="13">可蒸馏基数</text>
+    <text x="400" y="123" text-anchor="middle" font-size="13" font-weight="600">9078 题</text>
+
+    <text x="150" y="160" font-size="12" class="mut">− 3295（36.3%）教师输出未通过执行验证</text>
+
+    <rect class="box-acc" x="150" y="170" width="319" height="40" rx="2"/>
+    <text x="140" y="195" text-anchor="end" font-size="13">可验证蒸馏产出</text>
+    <text x="309" y="195" text-anchor="middle" font-size="13" font-weight="600">5783 条（63.7%）</text>
+
+    <!-- 被过滤样本构成 -->
+    <text x="150" y="248" font-size="12" class="mut">被过滤的 3295 条按错误类型拆分：</text>
+    <rect class="bar-soft" x="150" y="258" width="465" height="26"/>
+    <rect class="box" x="615" y="258" width="22" height="26"/>
+    <rect class="box" x="637" y="258" width="21" height="26"/>
+    <rect class="box" x="658" y="258" width="12" height="26"/>
+    <text x="382" y="276" text-anchor="middle" font-size="13" font-weight="600">可执行但结果错误　2944 条　89.3%</text>
+    <text x="150" y="304" font-size="12" class="mut">右侧三段依次为：执行超时 139（4.2%）、未输出 SQL 135（4.1%）、执行报错 77（2.3%）</text>
+  </svg>
+  </div>
+  <figcaption><b>图 2：</b>数据构造漏斗。矩形长度与题数成正比。被过滤样本中 89.3% 属于「语法正确、能成功执行、但答的是另一个问题」——这类样本大模型评判和「看着合理」型过滤抓不到，只有真跑一遍才能发现。</figcaption>
+</figure>
+
+<div class="tab">
+  <div class="cap"><b>表 2：</b>被执行过滤丢弃的 3295 条样本的错误分布。</div>
+  <div class="tab-wrap">
+  <table>
+    <thead><tr><th>错误类型</th><th class="num">条数</th><th class="num">占被丢弃的比例</th></tr></thead>
+    <tbody>
+      <tr class="hl"><td>能成功执行但结果错误</td><td class="num">2944</td><td class="num">89.3%</td></tr>
+      <tr><td>执行超时</td><td class="num">139</td><td class="num">4.2%</td></tr>
+      <tr><td>未输出 SQL（预算截断）</td><td class="num">135</td><td class="num">4.1%</td></tr>
+      <tr><td>执行报错</td><td class="num">77</td><td class="num">2.3%</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<p class="small">教师答错时与标准答案的结构差异：结构完全相同、只差选列或条件或字面量 53.0%；JOIN 数不同 24.6%；嵌套结构不同 12.5%；GROUP BY 不同 6.0%；聚合不同 3.9%。</p>
+
+<h3>5.3 执行过滤的难度偏置</h3>
+
+<p>任何基于「模型能不能做对」的数据过滤都会把训练集推向简单题。这一偏置被量化如下，而不是假装它不存在。</p>
+
+<div class="tab">
+  <div class="cap"><b>表 3：</b>执行过滤的保留率随难度单调下降，训练集难度分布发生系统性漂移。<span class="small">训练集的难度为代理标签——官方难度标注只在开发集上提供，因此本表用于描述数据构成，不用于支撑任何分难度的效果结论。</span></div>
+  <div class="tab-wrap">
+  <table>
+    <thead><tr><th>难度</th><th class="num">总数</th><th class="num">保留数</th><th class="num">保留率</th><th class="num">训练集占比漂移</th></tr></thead>
+    <tbody>
+      <tr><td>简单</td><td class="num">4928</td><td class="num">3452</td><td class="num">70.0%</td><td class="num">54.3% → 59.7%（+5.4）</td></tr>
+      <tr><td>中等</td><td class="num">3015</td><td class="num">1774</td><td class="num">58.8%</td><td class="num">33.2% → 30.7%（−2.5）</td></tr>
+      <tr><td>困难</td><td class="num">1135</td><td class="num">557</td><td class="num">49.1%</td><td class="num">12.5% → 9.6%（−2.9）</td></tr>
+      <tr><td>合计</td><td class="num">9078</td><td class="num">5783</td><td class="num">63.7%</td><td class="num">—</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<p>针对这一偏置测了两条补救路线，结论都是负面的，详见第 9 节：</p>
+<ul>
+  <li><b>多采样路线</b>（让教师多试几次把难题做出来）：193 题 × 每题 6 条、三种提示策略轮换，命中率从 k=1 的 65.28% 升到 k=6 的 69.95%，<b>6 倍 API 成本只换来 4.67 个百分点</b>。更有说服力的依据是三种策略的单条命中率几乎相同（62.69%~64.51%）——它们解出的是同一批题，教师的错误是系统性的。</li>
+  <li><b>反向合理化</b>（把标准答案的 SQL 给教师，让它补出通向这条 SQL 的推理链）：SQL 一律用标准答案，只有推理链是生成的；教师复述时改写过 SQL 的一律丢弃（96.4%，即 3178/3295 逐字相同，丢弃 117 条），补充后数据量达 8961 条、难度分布完全还原。但对照实验测出<b>零收益</b>（第 7.2、9 节）。</li>
+</ul>
+
+<h2>6. 训练方法</h2>
+
+<h3>6.1 监督微调</h3>
+
+<p>监督目标是「推理链 + SQL」，而不是只有 SQL——这一点由第 7.2 节的单变量对照确定。全参数微调与低秩适配（Low-Rank Adaptation, LoRA）的对照见表 5。</p>
+
+<div class="tab">
+  <div class="cap"><b>表 4：</b>监督微调超参数。全部实验锁死有效批量 48，改显卡数必须同步改梯度累积，否则实验不可比。</div>
+  <div class="tab-wrap">
+  <table>
+    <thead><tr><th>参数</th><th>取值</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>微调方式</td><td>全参数微调</td><td>对照组为低秩适配，见表 5</td></tr>
+      <tr><td>分布式策略</td><td>DeepSpeed 零冗余优化器阶段三（ZeRO Stage 3）</td><td>刻意不开 CPU 卸载：卸载会换用需即时编译的优化器实现，多进程并发编译同一扩展会冲突</td></tr>
+      <tr><td>显卡数</td><td class="num">6</td><td>受分区配额限制</td></tr>
+      <tr><td>单卡批量 / 梯度累积</td><td class="num">1 / 8</td><td>—</td></tr>
+      <tr><td>有效批量</td><td class="num">48</td><td>跨所有实验锁死不变</td></tr>
+      <tr><td>学习率 / 预热比例</td><td class="num">1e-5 / 0.03</td><td>优化器 AdamW</td></tr>
+      <tr><td>训练轮数</td><td class="num">2</td><td>—</td></tr>
+      <tr><td>最大序列长度</td><td class="num">5120</td><td>4096 时截断率 6.5%，5120 降到 2.5%，再放宽无改善</td></tr>
+      <tr><td>损失掩码</td><td>仅在回答段计算损失</td><td>提示词段（约 2500 token 的 schema）占绝大多数 token，不掩码则损失主要由「复读 schema」贡献；实测参与损失的 token 占 15.50%</td></tr>
+      <tr><td>训练/验证划分</td><td>按数据库编号划分</td><td>按题目随机划分会泄漏，同库的 schema 与取值训练时已见过</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="tab">
+  <div class="cap"><b>表 5：</b>全参数微调与低秩适配的对照（同 5000 条数据、同有效批量、同训练轮数）。低秩适配单独调过学习率并挂满全部线性层，对照刻意做公平。</div>
+  <div class="tab-wrap">
+  <table>
+    <thead><tr><th>编号</th><th>微调方式</th><th>关键设置</th><th class="num">执行准确率</th><th class="num">语法有效率</th><th class="num">差值</th><th class="num">p 值</th></tr></thead>
+    <tbody>
+      <tr class="hl"><td>S2a</td><td>全参数</td><td>学习率 1e-5，ZeRO-3 六卡</td><td class="num">57.37%</td><td class="num">90.74%</td><td class="num">—</td><td class="num">—</td></tr>
+      <tr><td>S5_lora</td><td>低秩适配</td><td>r=32、alpha=64、dropout 0.05、学习率 2e-4、作用于注意力与前馈网络的全部线性层、训练后合并回基座</td><td class="num">54.30%</td><td class="num">89.31%</td><td class="num">−3.06</td><td class="num">0.002</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<p class="small">低秩适配的学习率不沿用 1e-5，是因为它只更新约 1% 的参数，沿用等于故意让它输；只挂 q/v 投影是常见的偷懒做法，同样会让对照不公平。代价方面，全参数微调的训练时长是低秩适配的 1.55 倍。</p>
+
+<h3>6.2 偏好优化</h3>
+
+<p>偏好对由微调后的模型<b>自采样 16 条 + 执行验证</b>构造：结果集正确的作正例，错误的作负例。第一轮实验（2923 对、60 个优化器步、学习率 5e-7）结果与基座逐字相同（Δ=+0.00，p=1.0），诊断过程见第 9.1 节。最终配置见表 6。</p>
+
+<div class="tab">
+  <div class="cap"><b>表 6：</b>直接偏好优化的超参数（第一轮失败配置与最终配置对照）。</div>
+  <div class="tab-wrap">
+  <table>
+    <thead><tr><th>参数</th><th class="num">第一轮（白跑）</th><th class="num">最终轮</th><th>依据</th></tr></thead>
+    <tbody>
+      <tr><td>偏好对数量</td><td class="num">2923</td><td class="num">7989</td><td>每题采样 16 条，单题最多取 4 对（原为 1 对）</td></tr>
+      <tr><td>优化器步数</td><td class="num">60</td><td class="num">333</td><td>数据量增至 2.7 倍、轮数 1→2</td></tr>
+      <tr><td>学习率</td><td class="num">5e-7</td><td class="num">1e-6</td><td>对齐 ExCoT 论文</td></tr>
+      <tr><td>被优化的基座</td><td>直出 SQL 的模型</td><td>带推理链的模型</td><td>见第 9.1 节的诊断结论</td></tr>
+      <tr><td>标签噪声清洗</td><td>未做</td><td>剔除 77 对</td><td>其中 51 对的「负例」经复核其实是对的</td></tr>
+      <tr><td>KL 约束强度 beta</td><td class="num">0.1</td><td class="num">0.1</td><td>—</td></tr>
+      <tr><td>单卡批量 / 梯度累积</td><td class="num">1 / 16</td><td class="num">1 / 16</td><td>—</td></tr>
+      <tr><td>显卡数</td><td class="num">3</td><td class="num">3</td><td>需同时持有策略模型与参考模型；参考模型不参与优化、不被分片，每卡需完整 16 GB bf16 权重</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<p><b>负例选取的单变量对照是本项目的方法性设计。</b>偏好对里「正例定了，负例该从哪一条错误采样里取」此前没有见到单变量对照。固定其余全部设置，只改这一个变量：<b>取与正例最相似的负例，比取最不相似的高 1.83 个百分点（p=0.0084）</b>。这与 ExCoT 论文在 700 亿参数模型上的做法相反；我对差异的解释是模型规模，<b>此解释为推测，未做验证</b>。</p>
+
+<p>作为横向对照还实现了组相对策略优化（Group Relative Policy Optimization, GRPO）。二值奖励下 67.69% 的采样组全对或全错、组内优势恒为 0，因此按 Reasoning-SQL 的做法加入稠密奖励分量（可执行性 / schema F1 / n-gram 相似度），<b>封顶 0.3，不压过主奖励 1.0</b>，可用组比例从 28.6% 提升到 52.6%。其余超参：学习率 1e-6、裁剪范围 0.2、KL 惩罚系数 0.02（k3 估计量，恒非负）、每题采 16 条。</p>
+
+<h2>7. 实验结果</h2>
+
+<h3>7.1 主结果</h3>
+
+<div class="tab">
+  <div class="cap"><b>表 7：</b>主线结果。BIRD 开发集全量 1534 题；Spider 开发集为独立集，从未参与任何选型决策。</div>
+  <div class="tab-wrap">
+  <table>
+    <thead><tr><th>阶段</th><th class="num">训练数据</th><th class="num">BIRD 执行准确率</th><th class="num">语法有效率</th><th class="num">Δ 对基线</th><th class="num">p 值</th><th class="num">Spider 执行准确率</th></tr></thead>
+    <tbody>
+      <tr><td>基座（Qwen3-8B 零样本直出）</td><td class="num">—</td><td class="num">46.68%</td><td class="num">84.22%</td><td class="num">—</td><td class="num">—</td><td class="num">71.47%</td></tr>
+      <tr><td>+ 监督微调（可验证蒸馏推理链，六卡全参数）</td><td class="num">5783 条</td><td class="num">59.58%</td><td class="num">91.72%</td><td class="num">+12.90</td><td class="num">7.8e-26</td><td class="num">76.98%</td></tr>
+      <tr class="hl"><td>+ 直接偏好优化（自采样偏好对，最相似负例）</td><td class="num">7989 对</td><td class="num"><b>65.45%</b></td><td class="num"><b>97.13%</b></td><td class="num"><b>+18.77</b></td><td class="num">5.6e-54</td><td class="num"><b>79.11%</b></td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<p>总提升 +18.77 个百分点的配对自助法 95% 置信区间为 <b>[+16.49, +21.06]</b>。</p>
+
+<div class="tab">
+  <div class="cap"><b>表 8：</b>横向参照。流水线方案与单模型数字不可直接比较，此处并列仅为定位。</div>
+  <div class="tab-wrap">
+  <table>
+    <thead><tr><th>参照对象</th><th class="num">执行准确率</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>本项目最终模型（Qwen3-8B）</td><td class="num">65.45%</td><td>单模型、单次推理</td></tr>
+      <tr><td>教师模型 DeepSeek-V4-pro</td><td class="num">60.67%</td><td>学生已显著超过教师</td></tr>
+      <tr><td>最强免训练配置（B1）</td><td class="num">59.97%</td><td>需 19.5 倍推理成本</td></tr>
+      <tr><td>Llama3-70B-instruct（公开数据）</td><td class="num">40.80%</td><td>裸模型</td></tr>
+      <tr><td>XiYanSQL-QwenCoder-32B</td><td class="num">67.01%</td><td>单模型，合理对标对象</td></tr>
+      <tr><td>CHASE-SQL + Gemini</td><td class="num">74.90%</td><td><b>流水线方案，不可直接比较</b></td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<h3>7.2 消融：蒸馏的价值到底在哪</h3>
+
+<p>这条链刻意拆成四步、每步只改一个变量。直接比较「标准答案直出」与「教师加推理链」会一次改两个变量，涨了也说不清是哪个在起作用。四组训练数据严格等量（5000 条）。</p>
+
+<div class="tab">
+  <div class="cap"><b>表 9：</b>蒸馏价值的四步单变量拆解。结论：蒸馏的价值全在推理链，不在 SQL 本身。</div>
+  <div class="tab-wrap">
+  <table>
+    <thead><tr><th>编号</th><th>单一变量</th><th>训练数据</th><th class="num">执行准确率</th><th class="num">语法有效率</th><th class="num">与上一步的差</th><th class="num">p 值</th><th>结论</th></tr></thead>
+    <tbody>
+      <tr><td>S2a</td><td>基准</td><td>标准答案 5000 条，直出 SQL</td><td class="num">57.37%</td><td class="num">90.74%</td><td class="num">—</td><td class="num">—</td><td>S2 系列基准</td></tr>
+      <tr><td>S2b</td><td>数据来源 → 教师 SQL</td><td>蒸馏 5000 条，直出 SQL</td><td class="num">56.45%</td><td class="num">89.37%</td><td class="num">−0.91</td><td class="num">0.456</td><td><span class="neg">换 SQL 来源无差别（不显著）</span></td></tr>
+      <tr class="hl"><td>S2c</td><td>监督目标 → 推理链 + SQL</td><td>蒸馏 5000 条，带推理链</td><td class="num">59.32%</td><td class="num">90.74%</td><td class="num">+2.87</td><td class="num">0.0031</td><td><b>推理链是有效变量</b></td></tr>
+      <tr><td>S2d</td><td>蒸馏覆盖 → 加反向合理化</td><td>3229 自然 + 1771 合理化</td><td class="num">59.32%</td><td class="num">91.13%</td><td class="num">+0.00</td><td class="num">1.0</td><td><span class="neg">零收益</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="tab">
+  <div class="cap"><b>表 10：</b>数据规模曲线（标准答案数据，直出 SQL）。规模在 6000 条附近饱和，该结果直接终止了「继续堆数据」的路线。</div>
+  <div class="tab-wrap">
+  <table>
+    <thead><tr><th>编号</th><th>训练数据</th><th class="num">执行准确率</th><th class="num">语法有效率</th><th class="num">与上一档的差</th><th class="num">p 值</th><th>结论</th></tr></thead>
+    <tbody>
+      <tr><td>S1_3000</td><td>标准答案 3000 条</td><td class="num">56.65%</td><td class="num">89.50%</td><td class="num">—</td><td class="num">—</td><td>—</td></tr>
+      <tr><td>S1_6000</td><td>标准答案 6000 条</td><td class="num">59.13%</td><td class="num">91.33%</td><td class="num">+2.48</td><td class="num">0.0068</td><td>有效</td></tr>
+      <tr><td>S1_9428</td><td>标准答案 9428 条</td><td class="num">59.84%</td><td class="num">91.66%</td><td class="num">+0.72</td><td class="num">0.472</td><td><span class="neg">不显著，已饱和</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="tab">
+  <div class="cap"><b>表 11：</b>最终基座选型（全量数据复测）。多喂 3178 条反向合理化样本、数据量增加 55%，未换来提升。</div>
+  <div class="tab-wrap">
+  <table>
+    <thead><tr><th>编号</th><th>训练数据</th><th class="num">执行准确率</th><th class="num">语法有效率</th><th class="num">Δ 对基线</th><th class="num">p 值</th><th>判定</th></tr></thead>
+    <tbody>
+      <tr class="hl"><td>NAT_only_cot</td><td>仅自然蒸馏 5783 条，带推理链</td><td class="num">59.58%</td><td class="num">91.72%</td><td class="num">+12.90</td><td class="num">7.8e-26</td><td><b>选为偏好优化的基座</b></td></tr>
+      <tr><td>BEST_full_rat_cot</td><td>自然 + 反向合理化 8961 条</td><td class="num">58.08%</td><td class="num">91.40%</td><td class="num">+11.41</td><td class="num">2.9e-21</td><td>数据量 +55%，效果反而更低</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="note">
+  <b>可以讲的：</b>反向合理化在等量对照下零收益，在全量对照下趋势为负。<b>不能讲的：</b>「反向合理化有害」——两次对照的 p 值都没过 0.05，不构成结论。
+</div>
+
+<h3>7.3 偏好优化与强化学习的横向对照</h3>
+
+<p>下表七种方法共用同一个基座（NAT_only_cot，59.58%）与同一套评测口径，同时给出相对全项目基线与相对该基座两个差值。</p>
+
+<div class="tab">
+  <div class="cap"><b>表 12：</b>七种偏好优化 / 强化学习方案的横向对照。</div>
+  <div class="tab-wrap">
+  <table>
+    <thead><tr><th>方法</th><th>训练数据</th><th class="num">执行准确率</th><th class="num">语法有效率</th><th class="num">Δ 对基线</th><th class="num">Δ 对基座</th><th class="num">p 值</th><th>判定</th></tr></thead>
+    <tbody>
+      <tr><td>直接偏好优化（缺陷期配置）</td><td class="num">2923 对</td><td class="num">59.58%</td><td class="num">91.46%</td><td class="num">+12.90</td><td class="num">+0.00</td><td class="num">1.0</td><td><span class="neg">白跑</span></td></tr>
+      <tr><td>简单偏好优化（SimPO）</td><td class="num">7989 对</td><td class="num">54.69%</td><td class="num">86.90%</td><td class="num">+8.01</td><td class="num">−4.89</td><td class="num">1.4e-05</td><td><b>显著变差</b></td></tr>
+      <tr><td>拒绝采样微调（RFT）</td><td>自采样正例</td><td class="num">61.08%</td><td class="num">93.61%</td><td class="num">+14.40</td><td class="num">+1.50</td><td class="num">0.069</td><td><span class="neg">不显著，不能引用</span></td></tr>
+      <tr><td>直接偏好优化 · 最不相似负例（ExCoT 做法）</td><td class="num">7989 对</td><td class="num">63.62%</td><td class="num">96.41%</td><td class="num">+16.94</td><td class="num">+4.04</td><td class="num">3.9e-06</td><td>次优</td></tr>
+      <tr><td>组相对策略优化 · 二值奖励</td><td>每题采 16 条</td><td class="num">63.95%</td><td class="num">95.11%</td><td class="num">+17.27</td><td class="num">+4.37</td><td class="num">3.2e-07</td><td>有效</td></tr>
+      <tr><td>组相对策略优化 · 稠密奖励</td><td>每题采 16 条</td><td class="num">64.47%</td><td class="num">97.33%</td><td class="num">+17.79</td><td class="num">+4.89</td><td class="num">3.2e-10</td><td>有效；相对二值奖励的增益仅域外显著</td></tr>
+      <tr class="hl"><td><b>直接偏好优化 · 最相似负例</b></td><td class="num">7989 对 / 2691 题</td><td class="num"><b>65.45%</b></td><td class="num">97.13%</td><td class="num"><b>+18.77</b></td><td class="num"><b>+5.87</b></td><td class="num">2.8e-11</td><td><b>最终方案</b></td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<h3>7.4 分难度表现</h3>
+
+<figure>
+  <div class="fig-wrap">
+  <svg viewBox="0 0 760 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="分难度执行准确率柱状图">
+    <!-- y 轴与网格 -->
+    <line class="axis" x1="70" y1="40" x2="70" y2="280"/>
+    <line class="axis" x1="70" y1="280" x2="710" y2="280"/>
+    <line class="grid" x1="70" y1="220" x2="710" y2="220"/>
+    <line class="grid" x1="70" y1="160" x2="710" y2="160"/>
+    <line class="grid" x1="70" y1="100" x2="710" y2="100"/>
+    <line class="grid" x1="70" y1="40" x2="710" y2="40"/>
+    <text x="60" y="285" text-anchor="end" font-size="12" class="mut">0</text>
+    <text x="60" y="225" text-anchor="end" font-size="12" class="mut">20</text>
+    <text x="60" y="165" text-anchor="end" font-size="12" class="mut">40</text>
+    <text x="60" y="105" text-anchor="end" font-size="12" class="mut">60</text>
+    <text x="60" y="45" text-anchor="end" font-size="12" class="mut">80</text>
+    <text x="22" y="170" font-size="12" class="mut" transform="rotate(-90 22 170)" text-anchor="middle">执行准确率 (%)</text>
+
+    <!-- 简单 -->
+    <rect class="bar" x="120" y="109.1" width="54" height="170.9"/>
+    <rect class="bar-acc" x="186" y="63.0" width="54" height="217.0"/>
+    <text x="147" y="102" text-anchor="middle" font-size="12">56.97</text>
+    <text x="213" y="56" text-anchor="middle" font-size="12" font-weight="600">72.32</text>
+    <text x="180" y="300" text-anchor="middle" font-size="13">简单（n=925）</text>
+    <text x="180" y="318" text-anchor="middle" font-size="12" class="acc">+15.35</text>
+
+    <!-- 中等 -->
+    <rect class="bar" x="320" y="185.0" width="54" height="95.0"/>
+    <rect class="bar-acc" x="386" y="108.7" width="54" height="171.3"/>
+    <text x="347" y="178" text-anchor="middle" font-size="12">31.68</text>
+    <text x="413" y="102" text-anchor="middle" font-size="12" font-weight="600">57.11</text>
+    <text x="380" y="300" text-anchor="middle" font-size="13">中等（n=464）</text>
+    <text x="380" y="318" text-anchor="middle" font-size="12" class="acc">+25.43</text>
+
+    <!-- 困难 -->
+    <rect class="bar" x="520" y="193.1" width="54" height="86.9"/>
+    <rect class="bar-acc" x="586" y="135.2" width="54" height="144.8"/>
+    <text x="547" y="186" text-anchor="middle" font-size="12">28.97</text>
+    <text x="613" y="128" text-anchor="middle" font-size="12" font-weight="600">48.28</text>
+    <text x="580" y="300" text-anchor="middle" font-size="13">困难（n=145）</text>
+    <text x="580" y="318" text-anchor="middle" font-size="12" class="acc">+19.31</text>
+
+    <!-- 图例 -->
+    <rect class="bar" x="120" y="336" width="14" height="12"/>
+    <text x="140" y="346" font-size="12" class="mut">基座 Qwen3-8B</text>
+    <rect class="bar-acc" x="260" y="336" width="14" height="12"/>
+    <text x="280" y="346" font-size="12" class="mut">最终模型（监督微调 + 直接偏好优化）</text>
+  </svg>
+  </div>
+  <figcaption><b>图 3：</b>分难度执行准确率。绝对提升在中等难度题上最大（+25.43 个百分点）。难度标签取自 BIRD 开发集官方标注。</figcaption>
+</figure>
+
+<div class="tab">
+  <div class="cap"><b>表 13：</b>分难度表现明细。</div>
+  <div class="tab-wrap">
+  <table>
+    <thead><tr><th>难度</th><th class="num">样本数</th><th class="num">基座</th><th class="num">最终模型</th><th class="num">提升</th></tr></thead>
+    <tbody>
+      <tr><td>简单</td><td class="num">925</td><td class="num">56.97%</td><td class="num">72.32%</td><td class="num">+15.35</td></tr>
+      <tr><td>中等</td><td class="num">464</td><td class="num">31.68%</td><td class="num">57.11%</td><td class="num">+25.43</td></tr>
+      <tr><td>困难</td><td class="num">145</td><td class="num">28.97%</td><td class="num">48.28%</td><td class="num">+19.31</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<h3>7.5 跨域表现与结构回放</h3>
+
+<p>Spider 开发集（1034 题）是独立集，<b>从未参与任何选型决策</b>，只在最后用作旁证。主线三个模型在其上的表现见表 14：相对监督微调基座提升 2.13 个百分点，p=0.014。</p>
+
+<div class="tab">
+  <div class="cap"><b>表 14：</b>主线（推理链分支）在 Spider 开发集上的表现。</div>
+  <div class="tab-wrap">
+  <table>
+    <thead><tr><th>模型</th><th class="num">Spider 执行准确率</th><th class="num">语法有效率</th></tr></thead>
+    <tbody>
+      <tr><td>基座</td><td class="num">71.47%</td><td class="num">98.07%</td></tr>
+      <tr><td>监督微调后（可验证蒸馏推理链）</td><td class="num">76.98%</td><td class="num">99.23%</td></tr>
+      <tr class="hl"><td>最终模型</td><td class="num"><b>79.11%</b></td><td class="num">99.90%</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<p>跨域灾难性遗忘是在<b>另一条分支</b>上观察到的：用标准答案 9428 条、直出 SQL 训练的模型（S1_9428）虽然在 BIRD 上达到 59.84%，Spider 却掉到 67.99%——比不训练还差。针对这一现象做了结构回放实验，见表 15。</p>
+
+<div class="tab">
+  <div class="cap"><b>表 15：</b>结构回放实验。<b>注意：这组实验做在「直出 SQL」分支上，与表 14 的推理链主线不是同一条线，两组数字不可混用。</b></div>
+  <div class="tab-wrap">
+  <table>
+    <thead><tr><th>编号</th><th>做法</th><th class="num">BIRD 执行准确率</th><th class="num">Spider 执行准确率</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>—</td><td>未训练的基座</td><td class="num">46.68%</td><td class="num">71.47%</td><td>—</td></tr>
+      <tr><td>S1_9428</td><td>纯 BIRD 微调（直出）</td><td class="num">59.84%</td><td class="num">67.99%</td><td><b>跨域灾难性遗忘</b></td></tr>
+      <tr><td>S6</td><td>10% Spider 嵌套与集合操作样本等量替换</td><td class="num">59.32%</td><td class="num">75.34%</td><td>用 3 卡训练，与 S7 不构成纯剂量对比</td></tr>
+      <tr class="hl"><td>S7</td><td>5% 等量替换（六卡）</td><td class="num">60.10%</td><td class="num">74.76%</td><td>Spider +6.77（p=1.5e-8）；BIRD 侧 +0.26 <span class="neg">不显著（p=0.829）</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<p><b>可以讲的：</b>少量定向结构回放即可修复跨域遗忘，且未观察到域内性能损失。<b>不能讲的：</b>5% 优于 10%——两组显卡数不同（3 卡与 6 卡），不是单一变量，不能作纯剂量的因果结论。</p>
+
+<h3>7.6 推理期方案（有效但不计入主线）</h3>
+
+<p>执行反馈引导重试（把数据库的报错信息反馈回模型做定向修复）在直出分支上取得 <b>62.39%</b>（p=7.6e-32），额外成本 22.7%（77.2 秒对 62.9 秒），且在对照中<b>从未把原本能跑通的 SQL 改坏</b>。它有效，但属于推理期的多轮机制，与本项目「只优化模型本身、单次推理」的口径不符，因此单独报告，不并入头条数字。</p>
+
+<h3>7.7 训练后推理形态的验证</h3>
+
+<p>免训练阶段，打开原生思考模式可带来 13.29 个百分点的提升（46.68% → 59.97%，表 1）。由此产生一个必须回答的问题：<b>训练完成之后，再叠加思考模式是否仍有增益？</b>这决定了最终模型是真的把推理能力固化进了权重，还是仅仅复制了提示词工程的效果。实验只改解码设置、不改权重，生成预算设为 8192 以避免第 1 节所述的截断缺陷。</p>
+
+<div class="tab">
+  <div class="cap"><b>表 16：</b>最终模型开启原生思考模式的对照（BIRD 开发集全量 1534 题，权重不变，仅改解码设置）。</div>
+  <div class="tab-wrap">
+  <table>
+    <thead>
+      <tr><th>配置</th><th class="num">执行准确率</th><th class="num">语法有效率</th><th class="num">生成耗时</th><th class="num">平均输出字符</th></tr>
+    </thead>
+    <tbody>
+      <tr class="hl"><td>最终模型，关闭思考模式（主线配置）</td><td class="num">65.45%</td><td class="num">97.13%</td><td class="num">316.6 s</td><td class="num">1365</td></tr>
+      <tr><td>最终模型，开启思考模式</td><td class="num">65.51%</td><td class="num">97.13%</td><td class="num">534.7 s</td><td class="num">2446</td></tr>
+      <tr><td>差异</td><td class="num">+0.06</td><td class="num">0.00</td><td class="num">1.69 倍</td><td class="num">1.79 倍</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<p>配对麦克尼马尔精确检验：原本正确而开启思考后错误的 58 题，原本错误而开启思考后正确的 59 题，<b>p = 1.0000</b>。这是一个近乎完美的随机翻转——思考模式在训练后的模型上既没有修好什么，也没有弄坏什么，只是引入了噪声。分难度结果同样重合（简单 72.22% 对 72.32%、中等 57.33% 对 57.11%、困难 48.97% 对 48.28%）。</p>
+
+<div class="note">
+  <b>同一项操作，在训练前后的价值完全不同。</b>训练前，开启思考模式值 <b>+13.29 个百分点</b>；训练后，值 <b>0 个百分点</b>（p = 1.0000），而推理开销增加 69%。这是「把推理时算力摊销进权重」最直接的证据：同一份推理能力，训练前需要每次现场生成 5281 字符去换取，训练后 1365 字符即可达到更高水平，继续增加推理长度不再带来任何收益。
+</div>
+
+<p>为使跨域对比与主评测集口径一致，在 Spider 开发集上补测了同样的免训练最优配置。</p>
+
+<div class="tab">
+  <div class="cap"><b>表 17：</b>Spider 开发集（1034 题，独立集）上最终模型与免训练最优方案的对照。</div>
+  <div class="tab-wrap">
+  <table>
+    <thead>
+      <tr><th>配置</th><th class="num">执行准确率</th><th class="num">语法有效率</th><th class="num">生成耗时</th><th class="num">平均输出字符</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>基座模型，直接输出 SQL</td><td class="num">71.47%</td><td class="num">98.07%</td><td class="num">—</td><td class="num">—</td></tr>
+      <tr><td>免训练最优：思考模式 + 建表语句 schema</td><td class="num">77.08%</td><td class="num">98.74%</td><td class="num">427.1 s</td><td class="num">4219</td></tr>
+      <tr class="hl"><td>最终模型</td><td class="num">79.11%</td><td class="num">99.90%</td><td class="num">57.3 s</td><td class="num">1075</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<p>三组配对检验：基座 → 免训练最优 <b>+5.61</b>（p = 2.47e-06，显著）；基座 → 最终模型 <b>+7.64</b>（p = 7.65e-10，显著）；免训练最优 → 最终模型 +2.03（<span class="neg">p = 0.0549，未通过 0.05 阈值，不能作为结论</span>）。</p>
+
+<div class="note">
+  <b>跨域结论必须按显著性如实表述。</b>在 Spider 上，最终模型相对免训练最优方案的准确率优势<b>未通过显著性检验</b>，因此只能表述为「准确率相当」；真正显著且可引用的是成本差异——<b>57.3 秒对 427.1 秒，推理耗时约为其七分之一</b>，平均输出长度为其四分之一。与 BIRD 上「更准且更省」（+5.48，显著；成本 1/3.3）不同，Spider 上的正确说法是<b>「同等精度，成本低一个数量级」</b>。
+</div>
+
+<h2>8. 推理成本分析</h2>
+
+<p>下表全部为同一张 A100 80GB、vLLM 0.8.5、温度 0、单次推理、BIRD 开发集全量 1534 题的墙钟时间，从各次跑批的元数据中统一抽取。</p>
+
+<div class="tab">
+  <div class="cap"><b>表 18：</b>精度与推理成本实测。「相对基座」为生成耗时之比。大语言模型解码是自回归的，耗时基本正比于输出 token 数，因此平均输出长度一列可直接解释耗时差异。</div>
+  <div class="tab-wrap">
+  <table>
+    <thead><tr><th>配置</th><th>输出形式</th><th class="num">执行准确率</th><th class="num">生成耗时 (s)</th><th class="num">平均输出字符</th><th class="num">相对基座</th></tr></thead>
+    <tbody>
+      <tr><td>A0 基座（基准配置）</td><td>直出 SQL</td><td class="num">46.68%</td><td class="num">53.9</td><td class="num">182</td><td class="num">1.0×</td></tr>
+      <tr><td>A6 基座 + 提示词推理</td><td>推理 + SQL</td><td class="num">50.98%</td><td class="num">113.7</td><td class="num">594</td><td class="num">2.1×</td></tr>
+      <tr><td>B3 基座 + 建表语句 + 提示词推理</td><td>推理 + SQL</td><td class="num">51.37%</td><td class="num">145.7</td><td class="num">641</td><td class="num">2.7×</td></tr>
+      <tr><td>8 次采样投票</td><td>直出 SQL × 8</td><td class="num">47.91%</td><td class="num">427.3</td><td class="num">181</td><td class="num">7.9×</td></tr>
+      <tr><td>B0 基座 + 原生思考模式</td><td>思考 + SQL</td><td class="num">59.06%</td><td class="num">883.1</td><td class="num">4762</td><td class="num">16.4×</td></tr>
+      <tr><td>B1 免训练最优（思考模式 + 建表语句）</td><td>思考 + SQL</td><td class="num">59.97%</td><td class="num">1048.7</td><td class="num">5281</td><td class="num">19.5×</td></tr>
+      <tr class="sep"><td>监督微调 · 直出分支（S1_9428）</td><td>直出 SQL</td><td class="num">59.84%</td><td class="num">62.9</td><td class="num">166</td><td class="num">1.2×</td></tr>
+      <tr><td>监督微调 · 推理链分支（NAT_only_cot）</td><td>推理 + SQL</td><td class="num">59.58%</td><td class="num">308.3</td><td class="num">1600</td><td class="num">5.7×</td></tr>
+      <tr class="hl"><td><b>最终模型（+ 直接偏好优化）</b></td><td>推理 + SQL</td><td class="num"><b>65.45%</b></td><td class="num"><b>316.6</b></td><td class="num"><b>1365</b></td><td class="num"><b>5.9×</b></td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<figure>
+  <div class="fig-wrap">
+  <svg viewBox="0 0 880 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="精度与推理成本的散点图">
+    <!-- 坐标轴 -->
+    <line class="axis" x1="90" y1="60" x2="90" y2="300"/>
+    <line class="axis" x1="90" y1="300" x2="820" y2="300"/>
+    <line class="grid" x1="90" y1="240" x2="820" y2="240"/>
+    <line class="grid" x1="90" y1="190" x2="820" y2="190"/>
+    <line class="grid" x1="90" y1="140" x2="820" y2="140"/>
+    <line class="grid" x1="90" y1="90" x2="820" y2="90"/>
+    <text x="82" y="294" text-anchor="end" font-size="12" class="mut">45</text>
+    <text x="82" y="244" text-anchor="end" font-size="12" class="mut">50</text>
+    <text x="82" y="194" text-anchor="end" font-size="12" class="mut">55</text>
+    <text x="82" y="144" text-anchor="end" font-size="12" class="mut">60</text>
+    <text x="82" y="94" text-anchor="end" font-size="12" class="mut">65</text>
+    <text x="30" y="180" font-size="12" class="mut" transform="rotate(-90 30 180)" text-anchor="middle">执行准确率 (%)</text>
+
+    <!-- x 刻度（对数） -->
+    <line class="grid" x1="112.9" y1="300" x2="112.9" y2="304"/>
+    <text x="112.9" y="320" text-anchor="middle" font-size="12" class="mut">50</text>
+    <line class="grid" x1="262.7" y1="300" x2="262.7" y2="304"/>
+    <text x="262.7" y="320" text-anchor="middle" font-size="12" class="mut">100</text>
+    <line class="grid" x1="412.7" y1="300" x2="412.7" y2="304"/>
+    <text x="412.7" y="320" text-anchor="middle" font-size="12" class="mut">200</text>
+    <line class="grid" x1="562.5" y1="300" x2="562.5" y2="304"/>
+    <text x="562.5" y="320" text-anchor="middle" font-size="12" class="mut">400</text>
+    <line class="grid" x1="712.4" y1="300" x2="712.4" y2="304"/>
+    <text x="712.4" y="320" text-anchor="middle" font-size="12" class="mut">800</text>
+    <text x="455" y="345" text-anchor="middle" font-size="12" class="mut">1534 题生成耗时（秒，对数刻度）</text>
+
+    <!-- 等精度参考线 -->
+    <line class="dash" x1="162.5" y1="141.6" x2="771" y2="141.6"/>
+    <text x="300" y="133" text-anchor="middle" font-size="12" class="mut">同等精度，1/16.7 的推理成本</text>
+
+    <!-- 免训练配置（灰） -->
+    <circle class="dot" cx="129.1" cy="273.2" r="5"/>
+    <text x="140" y="278" font-size="12" class="mut">A0 基座 46.68%</text>
+    <circle class="dot" cx="290.5" cy="230.2" r="5"/>
+    <text x="301" y="235" font-size="12" class="mut">A6 提示词推理 50.98%</text>
+    <circle class="dot" cx="344.2" cy="226.3" r="5"/>
+    <text x="355" y="214" font-size="12" class="mut">B3 51.37%</text>
+    <circle class="dot" cx="576.8" cy="277.8" r="5"/>
+    <text x="588" y="282" font-size="12" class="mut">8 次采样投票 47.91%</text>
+    <circle class="dot" cx="733.8" cy="149.4" r="5"/>
+    <text x="726" y="170" text-anchor="end" font-size="12" class="mut">B0 思考模式 59.06%</text>
+    <circle class="dot" cx="771.0" cy="140.3" r="5"/>
+    <text x="815" y="122" text-anchor="end" font-size="12" class="mut">B1 免训练最优 59.97%</text>
+    <text x="815" y="106" text-anchor="end" font-size="12" class="mut">（19.5 倍成本）</text>
+
+    <!-- 训练后模型（强调色） -->
+    <circle class="dot-acc" cx="162.5" cy="141.6" r="6"/>
+    <text x="176" y="163" font-size="12" class="acc">监督微调 · 直出 59.84%</text>
+    <circle class="dot-acc" cx="506.2" cy="144.2" r="6"/>
+    <text x="522" y="139" font-size="12" class="acc">监督微调 · 推理链 59.58%</text>
+    <circle class="dot-acc" cx="512.0" cy="85.5" r="7"/>
+    <text x="524" y="78" font-size="13" class="acc" font-weight="600">最终模型 65.45%</text>
+    <text x="524" y="94" font-size="12" class="mut">耗时为 B1 的 1/3.3</text>
+
+    <!-- 图例 -->
+    <circle class="dot" cx="100" cy="366" r="5"/>
+    <text x="112" y="370" font-size="12" class="mut">免训练配置（提示词工程）</text>
+    <circle class="dot-acc" cx="300" cy="366" r="5"/>
+    <text x="312" y="370" font-size="12" class="mut">后训练模型</text>
+  </svg>
+  </div>
+  <figcaption><b>图 4：</b>精度-成本帕累托图。横轴为对数刻度。两条可引用的结论：直出分支的微调模型与免训练最优在精度上统计等同（59.84% vs 59.97%，Δ=−0.13，95% 置信区间 [−2.54, +2.35]，p=0.959），而耗时仅为其 1/16.7；最终模型在<b>更低成本（1/3.3）下取得更高精度（+5.48 个百分点）</b>。</figcaption>
+</figure>
+
+<p>成本差异的来源是输出长度：基准配置平均每题输出约 52 个 token，思考模式平均每题 1100~1300 个，多出来的部分全是模型的推理过程，而最终需要的 SQL 只有约 200 字符。最终模型平均输出 1365 字符，是免训练最优配置（5281 字符）的 0.26。</p>
+
+<div class="note">
+  <b>口径说明：</b>「1/16.7 成本追平免训练最优」这一条发生在<b>直出 SQL 分支</b>（S1_9428，标准答案数据训练）上，它不是最终模型。最终模型在<b>推理链分支</b>上，输出中带推理过程，耗时 316.6 秒，为免训练最优的 1/3.3。两条分支的数字不可混为一条主线。
+</div>
+
+<h2>9. 阴性结果与局限</h2>
+
+<p>这一节记录失败与不显著的部分。项目内所有 p ≥ 0.05 的结果由脚本自动标注为「不可引用」，以避免事后挑数字。</p>
+
+<h3>9.1 一次值得记录的误判</h3>
+
+<p>第一轮偏好优化的结果与基座逐字相同（Δ=+0.00，p=1.0）。当时的第一反应是归因于「偏好优化的目标与执行准确率结构性脱节」——它优化的是两条固定字符串的相对排序，而执行准确率取决于贪心解码出的那一条。为了验证这个归因，在同一批偏好对上分别用基座与训练后模型打分：<b>92.5% 的贪心输出逐字未变，但正负例的排序间隔从 0.67 涨到 4.81</b>。排序确实被拉开了，只是幅度不足以改变贪心解码的结果。真正的原因是<b>训练强度不足</b>（60 步 × 5e-7），而不是算法选错。没有这个诊断，就会去换算法，换完还是不动，再换下一个，永远找不到真因。</p>
+
+<p class="small">同期另一起事故：观察到损失稳定在 11.06（理论初值应为 ln2 ≈ 0.693），一度以为训练发散，实际是读错了日志——11.06 ≈ 0.693 × 16，是梯度累积的展示求和。教训是怀疑数值异常时，也要查产生这个数字的显示逻辑。</p>
+
+<h3>9.2 明确失败或不显著的方案</h3>
+
+<div class="tab">
+  <div class="cap"><b>表 19：</b>阴性结果汇总。</div>
+  <div class="tab-wrap">
+  <table>
+    <thead><tr><th>方案</th><th class="num">结果</th><th>判定</th></tr></thead>
+    <tbody>
+      <tr><td>简单偏好优化（SimPO）</td><td class="num">−4.89，p=1.4e-05</td><td><b>显著变差</b></td></tr>
+      <tr><td>拒绝采样微调（RFT）</td><td class="num">+1.50，p=0.069</td><td><span class="neg">不显著，不能作为结论</span></td></tr>
+      <tr><td>8 次采样投票（self-consistency）</td><td class="num">+1.69，p=0.427</td><td><span class="neg">不显著</span></td></tr>
+      <tr><td>反向合理化</td><td class="num">等量对照 p=1.0；全量对照趋势为负</td><td>零收益，弃用；<b>不能称其有害</b></td></tr>
+      <tr><td>教师多策略多采样</td><td class="num">6 倍成本换 4.67 个百分点</td><td>成本判定劝退，非统计结论</td></tr>
+      <tr><td>难度配比调整</td><td class="num">三组无显著差异，偏难配比最差</td><td>不是有效杠杆</td></tr>
+      <tr><td>数据规模 6000 → 9428</td><td class="num">+0.72，p=0.472</td><td><span class="neg">已饱和</span></td></tr>
+      <tr><td>第二轮在线策略迭代</td><td class="num">可用偏好对由 7989 降至 5179（−35%）</td><td>收益被数据存量锁死，停止迭代</td></tr>
+      <tr><td>组相对策略优化 · 稠密奖励</td><td class="num">相对二值奖励在 BIRD 主指标上阴性</td><td>仅域外显著，结论受限</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<p>第二轮在线策略迭代的失效原因在数据侧而不在超参：模型变强后，采样 16 条里「有对有错」的题越来越少，可构造偏好对的题目比例从 28.54% 跌到 17.38%，迭代收益被可用偏好对的存量锁死。</p>
+
+<h3>9.3 强化学习的硬边界</h3>
+
+<p>用两个互不依赖的口径测量当前方案拿不到的部分：训练侧「采样 16 次全部错误」的题目占 <b>23.1%</b>；评测侧「7 种方法逐题取并集后仍全错」的占 <b>24.97%</b>。两个口径都落在 24% 附近。</p>
+
+<h3>9.4 未解决的问题</h3>
+
+<div class="tab">
+  <div class="cap"><b>表 20：</b>项目未解决的问题（如实列出，不作粉饰）。</div>
+  <div class="tab-wrap">
+  <table>
+    <thead><tr><th>问题</th><th>现状</th></tr></thead>
+    <tbody>
+      <tr><td>教师答错的 3295 条难题</td><td>多采样路线因成本判死、反向合理化零收益，<b>最终一条也没有被真正利用</b></td></tr>
+      <tr><td>推理链的正确性</td><td><b>从未被验证</b>。执行过滤保证的是答案正确，不是推理过程正确；「可验证蒸馏」验的只是一半</td></tr>
+      <tr><td>「多采样不值得」这个判断</td><td>基于 193 题子样本加成本考量，<b>不是统计结论</b>，且依赖个人的算力预算。若算力充裕，判断可能反转</td></tr>
+      <tr><td>执行准确率指标本身</td><td>沿用官方的结果集集合语义，对行序不敏感，漏写 ORDER BY 但结果集相同的 SQL 会被判对；补偿手段是额外按 SQL 结构分桶报告</td></tr>
+      <tr><td>5% 与 10% 结构回放的剂量差异</td><td>两组显卡数不同（3 卡与 6 卡），<b>不能作为纯剂量的因果结论</b></td></tr>
+      <tr><td>模型规模解释</td><td>负例选取结论与 ExCoT（700 亿参数）相反，「因模型规模不同」是<b>推测，未做验证</b></td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<h2>10. 工程实现要点</h2>
+
+<div class="tab">
+  <div class="cap"><b>表 21：</b>硬件、集群与软件栈。</div>
+  <div class="tab-wrap">
+  <table>
+    <thead><tr><th>项目</th><th>配置</th></tr></thead>
+    <tbody>
+      <tr><td>集群 / 调度</td><td>天河 TH-GPU 集群，定制 Slurm（yhrun / yhbatch / yhq）</td></tr>
+      <tr><td>显卡</td><td>NVIDIA A100 80GB PCIe；训练分区配额 6 卡 + 48 CPU 核，评测分区每节点 2 卡</td></tr>
+      <tr><td>存储</td><td>Lustre 并行文件系统</td></tr>
+      <tr><td>训练</td><td>PyTorch + DeepSpeed 零冗余优化器阶段三，六卡全参数微调</td></tr>
+      <tr><td>推理与评测</td><td>vLLM 0.8.5.post1（torch 2.6.0 / CUDA 12.4），<b>单独虚拟环境</b>——vLLM 会锁死 torch 与 transformers 版本，装崩会连累训练环境</td></tr>
+      <tr><td>偏好优化 / 强化学习</td><td><b>自行实现</b>：损失函数、组内优势归一化、KL 估计量均手写，未使用现成强化学习库</td></tr>
+      <tr><td>评测</td><td><b>自行实现</b>的执行式评测器：真实执行 SQL 并比对结果集，分难度与分 SQL 结构报告，配对麦克尼马尔检验与自助法置信区间</td></tr>
+      <tr><td>低秩适配对照</td><td>PEFT，仅用于表 5 的对照实验</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<h3>10.1 评测器先于一切</h3>
+
+<p>项目的第一件事是把尺子造准：用标准答案当作预测跑自检，1219 题中 1218 题通过（99.92%）；唯一未通过项追到底是<b>标准答案自身需要跑 128 秒</b>触发超时，不是评测器的缺陷，因此已知的不可达上界为 0.08%。据此修正超时口径后，在全量 1534 题上重跑自检得到 <b>100.0%</b>，评测器本身不再引入误差。这次自检一次性暴露了三类隐藏问题：超时语义、标准答案数据质量、SQL 抽取逻辑。超时刻意设置为不对称——预测 SQL 30 秒、标准答案 300 秒，方向是对模型更严。</p>
+
+<p>数据获取环节做了两道校验：按服务端返回的 <code>Content-Length</code> 精确校验字节数（只判「文件非空」会把中断产生的截断文件误认为完成）；从两个独立来源各下载一份开发集，对（题号, 库名, 问题, 归一化 SQL）计算 SHA-256，结果逐题完全一致。</p>
+
+<h3>10.2 训练前的三层验证</h3>
+
+<p>一次失败的六卡训练要浪费 1.5 小时，因此每次训练前按三层递进验证：零件级（纯 CPU，不训练；验证损失掩码、截断率、提示词一致性）→ 代码级（2 卡 + SGD 优化器，跑通完整训练循环与数据分片）→ 生产级（4 卡真实配置跑 4 步，看显存余量）。</p>
+
+<h3>10.3 共享集群上的调度经验</h3>
+
+<p>显卡数与 CPU 核心数是<b>两个独立配额</b>，只按显卡数算并发度会让一半算力闲置：</p>
+
+<pre><code>训练分区配额：6 GPU + 48 CPU 核（两个独立维度）
+
+  --cpus-per-gpu=16 × 3 GPU = 48 核  →  CPU 配额用尽，剩余 3 张卡无法并发
+  --cpus-per-gpu=8  × 3 GPU = 24 核  →  两个 3 卡作业可同时跑满</code></pre>
+
+<p>另一条经验是<b>减少作业数比减少计算量更值钱</b>：vLLM 加载一次 80 亿参数模型需 6.5 分钟（文件系统争用时可达 9 分钟），十余组免训练消融若拆成 10 个作业，光加载开销就是 65 分钟外加 10 次排队，因此合并为一个作业循环跑完。</p>
+
+<h3>10.4 沉淀下来的工程纪律</h3>
+
+<ul>
+  <li>混合推理模型的 token 预算必须按「推理链 + 答案」一起算——同一类截断缺陷在本项目里犯了两次（A7 与教师校准）。</li>
+  <li>训练端与评测端共用同一份提示词代码，否则蒸馏出的推理链会引用学生看不到的信息，等于训练时教模型编造。</li>
+  <li>改显卡数必须同步改梯度累积，锁死有效批量；4 卡 × 8 与 6 卡 × 8 是两个不同的训练配置。</li>
+  <li>训练中途就要保存检查点——低秩适配那次训完 1 小时 39 分，崩在最后一步保存，检查点目录全空。</li>
+  <li>单样本训练日志不能用来下任何结论；怀疑数值异常时，先查产生这个数字的显示逻辑。</li>
+  <li>按数据库编号而不是按题目划分训练与验证集，否则同库 schema 与取值会造成泄漏。</li>
+</ul>
+
+<h2>11. 后续工作</h2>
+
+<ul>
+  <li><b>推理链的正确性验证。</b>可验证蒸馏只校验了答案，没有校验推理过程；下一步计划对训练集做人工抽检，量化"推理写错但 SQL 恰好正确"的比例。</li>
+  <li><b>训练前置于思考模式之上的可能性。</b>本项目的偏好数据构造在关闭思考模式的模型上进行；若在思考模式输出上构造偏好对，采样与训练成本约为当前的三倍以上，受算力预算限制未做，属于<b>未验证的对照而非已证无效的方案</b>。</li>
+  <li>教师答错的 3295 条难题仍是未利用的存量，需要与「多采样」和「反向合理化」都不同的第三条路线。</li>
+</ul>
+
+<h2>附录 A：实验环境与复现细节</h2>
+
+<p>硬件、集群与软件栈见表 21。本附录补充数据、解码与评测设置，以及全部跑批的实测清单，供复现与核对。</p>
+
+<h3>A.1 数据</h3>
+
+<div class="tab">
+  <div class="cap"><b>表 A1：</b>数据集与用途。BIRD 训练集与开发集为不同数据库，属官方跨库泛化协议。</div>
+  <div class="tab-wrap">
+  <table>
+    <thead>
+      <tr><th>数据集</th><th>划分</th><th class="num">题数</th><th class="num">数据库数</th><th>用途</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>BIRD</td><td>训练集</td><td class="num">9428</td><td class="num">69</td><td>数据蒸馏、监督微调、偏好数据采样</td></tr>
+      <tr class="hl"><td>BIRD</td><td>开发集</td><td class="num">1534</td><td class="num">11</td><td>主评测集，全量评测不抽样</td></tr>
+      <tr><td>Spider</td><td>开发集</td><td class="num">1034</td><td class="num">20</td><td>独立评测集，不参与任何选型决策</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<p>数据完整性做了两道校验：按服务端返回的内容长度精确比对字节数（仅判断文件非空会把中断产生的截断文件误认为完成）；并从两个独立镜像各下载一份开发集，对（问题编号、数据库名、问题文本、归一化 SQL）计算 SHA-256 摘要，结果逐题一致。训练集中有 350 题（3.7%）的标注 SQL 在官方数据库文件上本身无法执行，这部分既不能判定教师对错也不能作为训练目标，予以排除并在全文分母中体现（9428 − 350 = 9078）。</p>
+
+<h3>A.2 解码与评测设置</h3>
+
+<div class="tab">
+  <div class="cap"><b>表 A2：</b>解码与评测设置。主线全部为贪心解码、单次推理。</div>
+  <div class="tab-wrap">
+  <table>
+    <thead><tr><th>项目</th><th>取值</th></tr></thead>
+    <tbody>
+      <tr><td>解码方式</td><td>贪心解码（温度 0，top-p 1.0）</td></tr>
+      <tr><td>每题采样条数</td><td>1（多次采样方案单独报告，不并入主线）</td></tr>
+      <tr><td>最大生成长度</td><td>直出模型 1024；推理链模型 1024；开启思考模式的对照组 8192</td></tr>
+      <tr><td>最大上下文长度</td><td>16384</td></tr>
+      <tr><td>预测 SQL 执行超时</td><td>30 秒</td></tr>
+      <tr><td>标注 SQL 执行超时</td><td>300 秒（刻意不对称，方向为对模型更严格）</td></tr>
+      <tr><td>结果比对语义</td><td>结果集集合比较，对齐 BIRD 官方实现</td></tr>
+      <tr><td>显著性检验</td><td>配对麦克尼马尔精确检验 + 配对自助法 95% 置信区间</td></tr>
+      <tr><td>显著性阈值</td><td>0.05；未达阈值者标注为不可引用</td></tr>
+      <tr><td>偏好数据采样</td><td>温度 0.8，top-p 0.95，每题 16 条</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<p>训练端与评测端<b>共用同一份提示词构造代码</b>。这一点是纪律而非风格：若两端不一致，蒸馏出的推理过程会引用学生在推理时看不到的信息，训练目标就变成了教模型编造。</p>
+
+<h3>A.3 复现入口</h3>
+
+<pre><code># 生成 + 评测一条龙（所有跑批走同一入口，保证配置可复现）
+MODEL=&lt;权重路径&gt; bash scripts/gen_eval.sh &lt;跑批名&gt; \
+      --schema-fmt mschema --cot --max-tokens 1024
+
+# 免训练思考模式基线（预算必须放大，否则推理过程会挤掉答案）
+MODEL=&lt;基座路径&gt; bash scripts/gen_eval.sh B1_think_ddl \
+      --schema-fmt ddl --enable-thinking --max-tokens 8192
+
+# 六卡全参数监督微调
+NPROC=6 bash scripts/train.sh &lt;实验名&gt; \
+      --train-file &lt;数据&gt; --deepspeed configs/ds_zero3.json \
+      --lr 1e-5 --epochs 2 --grad-accum 8 --max-len 5120
+
+# 直接偏好优化（参考模型为监督微调后的权重）
+NPROC=3 bash scripts/train_dpo.sh &lt;实验名&gt; &lt;SFT权重&gt; \
+      --beta 0.1 --lr 1e-6 --epochs 2 --grad-accum 16</code></pre>
+
+<h3>A.4 全部跑批的实测清单</h3>
+
+<p>下表为 BIRD 开发集上全部跑批的耗时与输出长度，均从各次生成的元数据中统一抽取，同机同引擎同解码设置。「输出含推理」指回答正文中是否包含推理过程，与是否开启原生思考模式是两个独立维度。</p>
+
+<div class="tab">
+  <div class="cap"><b>表 A3：</b>BIRD 开发集全部跑批的实测清单（1534 题）。</div>
+  <div class="tab-wrap">
+  <table>
+    <thead>
+      <tr><th>跑批</th><th>模型 / 方法</th><th>思考模式</th><th>输出含推理</th><th class="num">生成耗时</th><th class="num">平均输出字符</th><th class="num">执行准确率</th></tr>
+    </thead>
+    <tbody>
+      <tr class="hl"><td>A0</td><td>基座，直接输出 SQL</td><td>否</td><td>否</td><td class="num">53.9 s</td><td class="num">182</td><td class="num">46.68%</td></tr>
+      <tr><td>A1</td><td>基座，建表语句 schema</td><td>否</td><td>否</td><td class="num">58.8 s</td><td class="num">173</td><td class="num">48.31%</td></tr>
+      <tr><td>A6</td><td>基座，提示词要求先推理</td><td>否</td><td>是</td><td class="num">113.7 s</td><td class="num">594</td><td class="num">50.98%</td></tr>
+      <tr><td>B3</td><td>基座，建表语句 + 提示词推理</td><td>否</td><td>是</td><td class="num">145.7 s</td><td class="num">641</td><td class="num">51.37%</td></tr>
+      <tr><td>B0</td><td>基座，思考模式（预算 8192）</td><td>是</td><td>—</td><td class="num">883.1 s</td><td class="num">4762</td><td class="num">59.06%</td></tr>
+      <tr class="hl"><td>B1</td><td>基座，思考模式 + 建表语句（免训练最优）</td><td>是</td><td>—</td><td class="num">1048.7 s</td><td class="num">5281</td><td class="num">59.97%</td></tr>
+      <tr><td>SC8</td><td>基座，8 次采样投票</td><td>否</td><td>否</td><td class="num">427.3 s</td><td class="num">181</td><td class="num">47.91%</td></tr>
+      <tr><td>S1-3000</td><td>监督微调，标注数据 3000 条，直出</td><td>否</td><td>否</td><td class="num">59.1 s</td><td class="num">162</td><td class="num">56.65%</td></tr>
+      <tr><td>S1-6000</td><td>监督微调，标注数据 6000 条，直出</td><td>否</td><td>否</td><td class="num">59.8 s</td><td class="num">167</td><td class="num">59.13%</td></tr>
+      <tr class="hl"><td>S1-9428</td><td>监督微调，标注数据全量，直出</td><td>否</td><td>否</td><td class="num">62.9 s</td><td class="num">166</td><td class="num">59.84%</td></tr>
+      <tr><td>S5</td><td>低秩适配对照，直出</td><td>否</td><td>否</td><td class="num">57.3 s</td><td class="num">165</td><td class="num">54.30%</td></tr>
+      <tr><td>S7</td><td>监督微调 + 5% 结构回放，直出</td><td>否</td><td>否</td><td class="num">57.9 s</td><td class="num">163</td><td class="num">60.10%</td></tr>
+      <tr><td>retry</td><td>监督微调 + 执行反馈重试</td><td>否</td><td>否</td><td class="num">77.2 s</td><td class="num">166</td><td class="num">62.39%</td></tr>
+      <tr><td>S2c</td><td>监督微调，蒸馏推理链 5000 条</td><td>否</td><td>是</td><td class="num">318.2 s</td><td class="num">1710</td><td class="num">59.32%</td></tr>
+      <tr class="hl"><td>NAT-5783</td><td>监督微调，蒸馏推理链全量（最终基座）</td><td>否</td><td>是</td><td class="num">308.3 s</td><td class="num">1600</td><td class="num">59.58%</td></tr>
+      <tr><td>RFT</td><td>拒绝采样微调</td><td>否</td><td>是</td><td class="num">288.8 s</td><td class="num">1497</td><td class="num">61.08%</td></tr>
+      <tr><td>SimPO</td><td>简单偏好优化</td><td>否</td><td>是</td><td class="num">340.3 s</td><td class="num">1648</td><td class="num">54.69%</td></tr>
+      <tr><td>DPO-相异</td><td>直接偏好优化，最不相似负例</td><td>否</td><td>是</td><td class="num">262.7 s</td><td class="num">1373</td><td class="num">63.62%</td></tr>
+      <tr><td>GRPO-二值</td><td>组相对策略优化，二值奖励</td><td>否</td><td>是</td><td class="num">287.2 s</td><td class="num">1497</td><td class="num">63.95%</td></tr>
+      <tr><td>GRPO-稠密</td><td>组相对策略优化，稠密奖励</td><td>否</td><td>是</td><td class="num">297.4 s</td><td class="num">1453</td><td class="num">64.47%</td></tr>
+      <tr class="hl"><td>DPO-相似</td><td>直接偏好优化，最相似负例（最终模型）</td><td>否</td><td>是</td><td class="num">316.6 s</td><td class="num">1365</td><td class="num">65.45%</td></tr>
+      <tr><td>DPO-相似+思考</td><td>最终模型开启思考模式</td><td>是</td><td>是</td><td class="num">534.7 s</td><td class="num">2446</td><td class="num">65.51%</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<h2>附录 B：可迁移的原理</h2>
+
+<p>以下八条是从本项目的具体实验中抽象出的一般性结论，每条都给出本项目内的实测依据。它们的适用范围不限于 Text2SQL。</p>
+
+<div class="tab">
+  <div class="cap"><b>表 B1：</b>从实验中提炼的一般性结论及其实测依据。</div>
+  <div class="tab-wrap">
+  <table>
+    <thead><tr><th style="width:30%">原理</th><th>实测依据</th></tr></thead>
+    <tbody>
+      <tr><td><b>一、环境反馈优于模型自评</b></td><td>在具备可执行环境的任务上，数据过滤应使用环境返回的确定性信号。被过滤样本中 89.3% 属于「可正常执行但返回结果错误」，此类样本语法正确、推理自洽，模型打分难以识别。</td></tr>
+      <tr><td><b>二、基于模型能力的数据过滤必然引入难度偏置</b></td><td>凡以「模型能否做对」为准则的筛选——执行过滤、拒绝采样、自训练、强化学习的样本选择——都会系统性保留简单样本。实测保留率简单 70.0%、中等 58.8%、困难 49.1%，训练集较原始分布偏简单 5.4 个百分点。该偏置在数据中不可见，必须显式量化。</td></tr>
+      <tr><td><b>三、模仿学习的上限是教师本身</b></td><td>监督微调的性能受限于教师能力（本项目教师为 60.67%）。若目标高于该水平，必须引入不依赖教师的信号；本项目用模型自采样加执行验证构造偏好数据，最终达到 65.45%，超过教师。</td></tr>
+      <tr><td><b>四、推理过程是「用推理时算力换训练数据」的手段</b></td><td>数据受限时（5000 条），推理过程监督带来 2.87 个百分点的显著提升；数据充足时（全量），其效果与增加直出样本相当，而推理成本高约 5 倍。推理链的价值随数据量增加而衰减，因此消融必须在多个数据规模上进行。</td></tr>
+      <tr><td><b>五、混合推理模型的生成预算由推理过程与答案共享</b></td><td>预算不足时推理过程会耗尽额度导致答案缺失，且被截断的恰好是最难的样本，表现形式与「模型能力不足」完全相同。该缺陷在教师侧与学生侧各出现一次，修正后教师执行准确率由 50.0% 升至 60.67%。</td></tr>
+      <tr><td><b>六、排序改善不等于贪心解码结果改变</b></td><td>偏好优化作用于两条固定候选的相对排序，而评测指标取决于贪心解码输出。实测偏好间隔由 0.67 增至 4.81，但 92.5% 的贪心输出逐字未变。判断偏好优化是否生效必须在固定数据集上聚合测量，不能依据训练日志。</td></tr>
+      <tr><td><b>七、强化学习的可行空间由采样上界决定</b></td><td>若样本在多次采样下全部错误，奖励恒为零、组内优势恒为零、梯度为零。基座采样 8 次至少对一次的比例为 51.76%，监督微调后升至 74.19%。「先监督微调、后偏好优化」的顺序是数据约束而非经验选择。</td></tr>
+      <tr><td><b>八、推理能力一旦内化，外挂推理即为冗余</b></td><td>训练前开启思考模式值 13.29 个百分点；训练后值 0 个百分点（p = 1.0000），而推理开销增加 69%。同一份能力，训练前需每次现场生成 5281 字符换取，训练后 1365 字符即达更高水平。</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<footer>
+  <p>本页所有数字均来自本人在 BIRD 开发集全量 1534 题与 Spider 开发集 1034 题上的实测结果；显著性统一采用配对麦克尼马尔精确检验，p ≥ 0.05 的结果在文中显式标注为不可引用。数据集为公开基准，算力为校级 GPU 集群，方案设计、代码实现、实验与分析均由本人独立完成。</p>
+  <p>刘云杰 · 2026 年 9 月</p>
+</footer>
+
+</div>
+</body>
+</html>
