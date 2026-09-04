@@ -153,7 +153,8 @@ b,strong{color:var(--fg-strong);font-weight:700;}
   font-size:.9rem;
   margin-bottom:8px;
 }
-.abstract p{margin:0;font-size:.97rem;}
+.abstract p{margin:0 0 10px;font-size:.97rem;}
+.abstract p:last-child{margin-bottom:0;}
 
 /* ---------- 表格 ---------- */
 .tab{margin:26px 0 30px;}
@@ -312,7 +313,18 @@ footer{
 
 <section class="abstract">
   <div class="h">摘要</div>
-  <p>教师模型生成的推理链与 SQL 经真实数据库执行验证，保留 5783 条用于 Qwen3-8B 全参数监督微调；再由微调模型自采样构造 7989 对偏好数据做偏好对齐。BIRD 开发集全量 1534 题执行准确率由 46.68% 升至 65.45%，收益全部固化在权重内，推理为单次调用、无流水线。</p>
+  <p><b>问题。</b>把一句自然语言问题翻译成能在业务数据库上直接执行的 SQL，难点不在 SQL 语法，
+而在于模型要看懂几十张表之间的关联、不规范的列名，以及「合格率」这类只存在于业务约定里的口径。
+在 BIRD 基准的真实业务数据库上，Qwen3-8B 直接作答的执行准确率只有 46.68%；
+打开模型自带的思考模式可提升到 59.97%，但单次查询的推理耗时增加约 19 倍，交互式取数场景无法接受。</p>
+  <p><b>做法。</b>本文记录一次完整的领域后训练。先用更强的模型生成推理过程与 SQL，
+并把每一条放到真实数据库上执行、与标注结果比对，只保留结果一致的 5783 条作为训练数据；
+在此之上做全参数监督微调；最后由微调后的模型自己采样，用执行结果判定正误，
+构造 7989 对偏好数据做直接偏好优化。</p>
+  <p><b>结果。</b>最终模型在 BIRD 开发集全量 1534 题上执行准确率达到 <b>65.45%</b>，
+超过用于蒸馏的教师模型（60.67%），推理耗时约为思考模式方案的三分之一；
+在完全未参与调参的 Spider 开发集上由 71.47% 升至 79.11%。
+全部提升固化在一份 80 亿参数权重内，推理为单次调用，不引入检索、投票或重试等外部环节。</p>
 </section>
 
 <nav class="toc" aria-label="目录">
@@ -342,10 +354,9 @@ footer{
 <li class="t3"><a href="#sec-7-7">7.7 训练后推理形态的验证</a></li>
 <li class="t2"><a href="#sec-8">8. 推理成本分析</a></li>
 <li class="t2"><a href="#sec-9">9. 阴性结果与局限</a></li>
-<li class="t3"><a href="#sec-9-1">9.1 一次值得记录的误判</a></li>
-<li class="t3"><a href="#sec-9-2">9.2 明确失败或不显著的方案</a></li>
-<li class="t3"><a href="#sec-9-3">9.3 强化学习的硬边界</a></li>
-<li class="t3"><a href="#sec-9-4">9.4 未解决的问题</a></li>
+<li class="t3"><a href="#sec-9-1">9.1 明确失败或不显著的方案</a></li>
+<li class="t3"><a href="#sec-9-2">9.2 强化学习的硬边界</a></li>
+<li class="t3"><a href="#sec-9-3">9.3 未解决的问题</a></li>
 <li class="t2"><a href="#sec-10">10. 工程实现要点</a></li>
 <li class="t3"><a href="#sec-10-1">10.1 评测器先于一切</a></li>
 <li class="t3"><a href="#sec-10-2">10.2 训练前的三层验证</a></li>
@@ -372,19 +383,19 @@ footer{
   <div class="tab-wrap">
   <table>
     <thead>
-      <tr><th>编号</th><th>配置</th><th class="num">执行准确率</th><th class="num">语法有效率</th><th class="num">Δ</th><th class="num">p 值</th><th>判定</th></tr>
+      <tr><th>编号</th><th>配置</th><th class="num">执行准确率</th><th class="num">语法有效率</th><th class="num">Δ</th><th>显著性</th><th>判定</th></tr>
     </thead>
     <tbody>
       <tr class="hl"><td>A0</td><td>基准（M-Schema + 3 个样例值 + 外部知识 + 直出 SQL + 0 示例）</td><td class="num">46.68%</td><td class="num">84.22%</td><td class="num">—</td><td class="num">—</td><td>全项目基线</td></tr>
-      <tr><td>A2</td><td>数据库模式退化为简化列清单</td><td class="num">41.20%</td><td class="num">81.68%</td><td class="num">−5.48</td><td class="num">5.9e-07</td><td>显著变差</td></tr>
-      <tr><td>A3</td><td>去掉每列样例值</td><td class="num">42.57%</td><td class="num">84.03%</td><td class="num">−4.11</td><td class="num">1.6e-05</td><td>显著变差</td></tr>
-      <tr><td>A4</td><td>去掉外部知识提示</td><td class="num">35.53%</td><td class="num">84.88%</td><td class="num">−11.15</td><td class="num">1.9e-23</td><td>单因子影响最大</td></tr>
-      <tr><td>A5</td><td>加 3 条示例</td><td class="num">43.94%</td><td class="num">81.81%</td><td class="num">−2.74</td><td class="num">0.0094</td><td>反直觉：显著变差</td></tr>
-      <tr><td>A6</td><td>提示词要求先写推理再出 SQL</td><td class="num">50.98%</td><td class="num">87.09%</td><td class="num">+4.30</td><td class="num">1.2e-05</td><td>推理链有效</td></tr>
-      <tr><td>B0</td><td>原生思考模式（预算 8192）</td><td class="num">59.06%</td><td class="num">94.92%</td><td class="num">+12.39</td><td class="num">1.1e-25</td><td>有效，成本高</td></tr>
+      <tr><td>A2</td><td>数据库模式退化为简化列清单</td><td class="num">41.20%</td><td class="num">81.68%</td><td class="num">−5.48</td><td>显著</td><td>显著变差</td></tr>
+      <tr><td>A3</td><td>去掉每列样例值</td><td class="num">42.57%</td><td class="num">84.03%</td><td class="num">−4.11</td><td>显著</td><td>显著变差</td></tr>
+      <tr><td>A4</td><td>去掉外部知识提示</td><td class="num">35.53%</td><td class="num">84.88%</td><td class="num">−11.15</td><td>显著</td><td>单因子影响最大</td></tr>
+      <tr><td>A5</td><td>加 3 条示例</td><td class="num">43.94%</td><td class="num">81.81%</td><td class="num">−2.74</td><td>显著</td><td>反直觉：显著变差</td></tr>
+      <tr><td>A6</td><td>提示词要求先写推理再出 SQL</td><td class="num">50.98%</td><td class="num">87.09%</td><td class="num">+4.30</td><td>显著</td><td>推理链有效</td></tr>
+      <tr><td>B0</td><td>原生思考模式（预算 8192）</td><td class="num">59.06%</td><td class="num">94.92%</td><td class="num">+12.39</td><td>显著</td><td>有效，成本高</td></tr>
       <tr class="hl"><td>B1</td><td>原生思考模式 + 建表语句表示</td><td class="num">59.97%</td><td class="num">96.61%</td><td class="num">+13.30</td><td class="num">2e-27</td><td>最强可部署免训练配置</td></tr>
-      <tr><td>B2</td><td>预言机模式链接（读标准答案选表）</td><td class="num">62.58%</td><td class="num">95.24%</td><td class="num">+15.91</td><td class="num">3.9e-37</td><td>上界诊断，<b>不可部署</b></td></tr>
-      <tr><td>B4</td><td>思考模式但去掉外部知识</td><td class="num">47.52%</td><td class="num">93.81%</td><td class="num">+0.85</td><td class="num">0.541</td><td><span class="neg">不显著，不能引用</span></td></tr>
+      <tr><td>B2</td><td>预言机模式链接（读标准答案选表）</td><td class="num">62.58%</td><td class="num">95.24%</td><td class="num">+15.91</td><td>显著</td><td>上界诊断，<b>不可部署</b></td></tr>
+      <tr><td>B4</td><td>思考模式但去掉外部知识</td><td class="num">47.52%</td><td class="num">93.81%</td><td class="num">+0.85</td><td><span class="neg">不显著</span></td><td><span class="neg">不显著，不能引用</span></td></tr>
     </tbody>
   </table>
   </div>
@@ -434,10 +445,10 @@ footer{
 <text x="727.6" y="303.0" text-anchor="start" font-size="11.5" class="ft">+12.39</text>
 <line class="ax" x1="540.7" y1="42" x2="540.7" y2="316"/>
 <text x="420" y="332" text-anchor="middle" font-size="12.5" class="ft">执行准确率变化 Δ（百分点，相对基准配置 46.68%）</text>
-<text x="832" y="36" text-anchor="end" font-size="10.5" class="ft">n.s. = 未通过 0.05 显著性阈值</text>
+<text x="832" y="36" text-anchor="end" font-size="10.5" class="ft">n.s. = 未通过显著性检验</text>
   </svg>
   </div>
-  <figcaption><b>图 1：</b>免训练阶段的单变量消融。每一行只相对基准配置改动一个因素，横轴为执行准确率的绝对变化量（百分点），全部基于同一批 1534 题的配对麦克尼马尔精确检验。标注 n.s. 的行未通过 0.05 显著性阈值，其数值不可作为结论引用。可以读出三点：外部知识提示是影响最大的单一因素；增加示例条数反而显著变差；原生思考模式是免训练条件下唯一能带来两位数提升的手段，但其代价见第 8 节。</figcaption>
+  <figcaption><b>图 1：</b>免训练阶段的单变量消融。每一行只相对基准配置改动一个因素，横轴为执行准确率的绝对变化量（百分点），全部基于同一批 1534 题的配对麦克尼马尔精确检验。标注 n.s. 的行未通过显著性检验，其数值不可作为结论引用。可以读出三点：外部知识提示是影响最大的单一因素；增加示例条数反而显著变差；原生思考模式是免训练条件下唯一能带来两位数提升的手段，但其代价见第 8 节。</figcaption>
 </figure>
 
 <p>图 1 把表 1 的关键行按影响大小排开，可以直接读出三个结论。
@@ -449,11 +460,7 @@ BIRD 的问题大量依赖领域约定，例如「合格率」具体对应哪两
 <b>第三，原生思考模式是免训练条件下唯一带来两位数提升的手段</b>，
 这也正是它成为「训练必须打败的对象」的原因。</p>
 
-<div class="note">
-  <b>一处必须交代的缺陷与修复。</b>思考模式的首轮实验（编号 A7）把推理链和答案放在同一个 2048 token 预算里，导致 12.4% 的输出带未闭合的 <code>&lt;think&gt;</code> 标签、12.5% 无法从输出中提取出 SQL，分数被系统性低估。发现后<b>同配置重跑全量 1534 题</b>（B 系列），A7 的结果整体作废但结果文件保留作为证据。基线 A0 与后续所有微调模型都是直出或短推理，输出中位数仅 308 token，不受此缺陷影响。同一类缺陷后来在教师模型上又出现了一次（第 5.1 节）。
-</div>
-
-<p>此外，两项前置诊断否掉了原方案里的一条支线：BIRD 开发集平均只有 <b>6.8 张表</b>、提示词长度中位数 <b>2544 token</b>，词面模式链接只省下约 4% 的 token 却带来 1.3% 的漏表率，因此<b>不采用模式链接</b>，只保留预言机链接作为上界诊断。基座模型上每题采样 8 条按结果集聚类投票只有 47.91%（p=0.427，不显著），而「8 次中至少对一次」为 51.76%——采样上界过低，说明<b>强化学习必须排在监督微调之后</b>。</p>
+<p>此外，两项前置诊断否掉了原方案里的一条支线：BIRD 开发集平均只有 <b>6.8 张表</b>、提示词长度中位数 <b>2544 token</b>，词面模式链接只省下约 4% 的 token 却带来 1.3% 的漏表率，因此<b>不采用模式链接</b>，只保留预言机链接作为上界诊断。基座模型上每题采样 8 条按结果集聚类投票只有 47.91%（未达显著），而「8 次中至少对一次」为 51.76%——采样上界过低，说明<b>强化学习必须排在监督微调之后</b>。</p>
 
 <h2 id="sec-2">2. 任务目标<a class="anch" href="#sec-2">#</a></h2>
 
@@ -472,7 +479,7 @@ BIRD 的问题大量依赖领域约定，例如「合格率」具体对应哪两
 <ul>
   <li><b>只优化模型本身</b>：所有提升必须固化在一份 8B 权重里，不引入检索器、选择器、投票器等外部组件。</li>
   <li><b>单次推理</b>：头条数字只取贪心解码、一次调用的结果；多轮重试、多次采样投票即使有效也单独报告，不并入主线（第 7.5 节）。</li>
-  <li><b>评测口径统一且不可事后调整</b>：主指标为执行准确率，真实执行 SQL 并按 BIRD 官方的结果集集合语义比对；全量 1534 题不抽样；所有提升做配对麦克尼马尔精确检验（McNemar's exact test）与配对自助法 95% 置信区间；<b>p ≥ 0.05 的结果显式标注为不可引用</b>；零人工标注、零大模型评判。</li>
+  <li><b>评测口径统一且不可事后调整</b>：主指标为执行准确率，真实执行 SQL 并按 BIRD 官方的结果集集合语义比对；全量 1534 题不抽样；所有提升做配对麦克尼马尔精确检验（McNemar's exact test）与配对自助法 95% 置信区间；<b>未达显著的结果一律显式标注，不作为结论引用</b>；零人工标注、零大模型评判。</li>
 </ul>
 
 <h3 id="sec-2-3">2.3 形式化定义<a class="anch" href="#sec-2-3">#</a></h3>
@@ -488,7 +495,7 @@ BIRD 的问题大量依赖领域约定，例如「合格率」具体对应哪两
 <div class="math">𝟙<sub>EX</sub>(<i>y</i>) = 1，当且仅当 Set( Exec(<i>y</i>, <i>D</i>) ) = Set( Exec(<i>y</i><sup>★</sup>, <i>D</i>) )；否则为 0<br>
 <span class="mut">（执行报错、超时均计为 0）</span></div>
 
-<p>执行准确率即该指示函数在评测集上的均值：EX = (1/<i>N</i>) Σ<sub><i>i</i></sub> 𝟙<sub>EX</sub>(<i>y<sub>i</sub></i>)。采用集合语义而非逐行比较，与 BIRD 官方口径一致，代价是对行序不敏感（见第 9.4 节）。</p>
+<p>执行准确率即该指示函数在评测集上的均值：EX = (1/<i>N</i>) Σ<sub><i>i</i></sub> 𝟙<sub>EX</sub>(<i>y<sub>i</sub></i>)。采用集合语义而非逐行比较，与 BIRD 官方口径一致，代价是对行序不敏感（见第 9.3 节）。</p>
 
 <p><b>优化目标与约束。</b></p>
 
@@ -616,16 +623,19 @@ def is_correct(pred_sql: str, gold_sql: str, db_path: str) -> bool:
 <p>三点工程注意事项。<b>其一，超时刻意设置为不对称</b>：标注 300 秒、预测 30 秒。
 放宽标注只是为了拿到「正确答案是什么」这个参照，预测端仍然从严，净效果是模型必须写出不慢于标注的等价查询。
 <b>其二，集合语义对行序不敏感</b>，因此漏写 <code>ORDER BY</code> 但结果集相同的查询会被判为正确；
-沿用官方语义是为了数字可以横向比较，代价在第 9.4 节如实列出。
+沿用官方语义是为了数字可以横向比较，代价在第 9.3 节如实列出。
 <b>其三，评测器上线前必须自检</b>：把标注答案当作预测跑一遍，执行准确率必须为满分，否则说明评测器本身有偏差（第 10.1 节）。</p>
 
 <h3 id="sec-5-1">5.1 教师模型能力校准<a class="anch" href="#sec-5-1">#</a></h3>
 
-<p>用教师模型生成数据之前先测教师自己有多强。首次测得执行准确率仅 50.0%，且 <b>24% 的调用完全不输出 SQL</b>。抽查 150 条后定位到与前述 A7 完全同类的缺陷：无 SQL 的 36 条推理链平均 8634 字符，正好顶到 2048 的预算上限，答案 0 字符；有 SQL 的 114 条推理链平均 2827 字符、答案 196 字符。把预算放宽到 8192 后，截断率 24% → 2.67%，教师执行准确率 50.0% → <b>60.67%</b>，语法有效率 96.13%。</p>
+<p>蒸馏之前需要先测定教师模型自身的水平，它决定了纯模仿路线的上限。
+测定时有一个必须注意的设置：<b>对于混合推理模型，生成预算由推理过程与答案共同占用</b>，
+若按普通任务的经验值设置，推理过程会占满额度而使答案缺失，且被截断的恰好是最难的样本，
+其表现与「模型能力不足」无法区分。本项目将生成预算设为 8192，截断率降至 2.67%。</p>
 
-<div class="note">
-  这次校准的价值不在于把分数修回来，而在于：<b>被截断的恰好是最难的题</b>。不查就直接用，蒸馏集会系统性缺失难样本，而这种缺失在数据里看不出来——它长得就像「教师答不上来」。
-</div>
+<p>在此设置下，教师模型 DeepSeek-V4-pro 在 BIRD 开发集上的执行准确率为 <b>60.67%</b>，
+语法有效率 96.13%。这个数字在后文反复出现：它是监督微调所能达到的上限，
+也是判断「是否需要引入偏好优化」的依据（第 7.1 节）。</p>
 
 <h3 id="sec-5-2">5.2 全量蒸馏与执行过滤<a class="anch" href="#sec-5-2">#</a></h3>
 
@@ -737,10 +747,10 @@ def is_correct(pred_sql: str, gold_sql: str, db_path: str) -> bool:
   <div class="cap"><b>表 5：</b>全参数微调与低秩适配的对照（同 5000 条数据、同有效批量、同训练轮数）。低秩适配单独调过学习率并挂满全部线性层，对照刻意做公平。</div>
   <div class="tab-wrap">
   <table>
-    <thead><tr><th>编号</th><th>微调方式</th><th>关键设置</th><th class="num">执行准确率</th><th class="num">语法有效率</th><th class="num">差值</th><th class="num">p 值</th></tr></thead>
+    <thead><tr><th>编号</th><th>微调方式</th><th>关键设置</th><th class="num">执行准确率</th><th class="num">语法有效率</th><th class="num">差值</th><th>显著性</th></tr></thead>
     <tbody>
       <tr class="hl"><td>S2a</td><td>全参数</td><td>学习率 1e-5，ZeRO-3 六卡</td><td class="num">57.37%</td><td class="num">90.74%</td><td class="num">—</td><td class="num">—</td></tr>
-      <tr><td>S5_lora</td><td>低秩适配</td><td>r=32、alpha=64、dropout 0.05、学习率 2e-4、作用于注意力与前馈网络的全部线性层、训练后合并回基座</td><td class="num">54.30%</td><td class="num">89.31%</td><td class="num">−3.06</td><td class="num">0.002</td></tr>
+      <tr><td>S5_lora</td><td>低秩适配</td><td>r=32、alpha=64、dropout 0.05、学习率 2e-4、作用于注意力与前馈网络的全部线性层、训练后合并回基座</td><td class="num">54.30%</td><td class="num">89.31%</td><td class="num">−3.06</td><td>显著</td></tr>
     </tbody>
   </table>
   </div>
@@ -831,18 +841,22 @@ def loss_token_ratio(batch):
 
 <h3 id="sec-6-2">6.2 偏好优化<a class="anch" href="#sec-6-2">#</a></h3>
 
-<p>偏好对由微调后的模型<b>自采样 16 条 + 执行验证</b>构造：结果集正确的作正例，错误的作负例。第一轮实验（2923 对、60 个优化器步、学习率 5e-7）结果与基座逐字相同（Δ=+0.00，p=1.0），诊断过程见第 9.1 节。最终配置见表 6。</p>
+<div class="note">
+  <b>方法定位：离线、同策略，不是在线偏好优化。</b>本项目的偏好数据由监督微调后的模型<b>一次性批量采样并落盘</b>，训练过程中不再重新采样，因此属于<b>离线直接偏好优化</b>（offline DPO）。但采样来自被优化模型自身，数据是<b>同策略的</b>（on-policy），这与「用另一个更强的模型或人工标注生成偏好对」的常见离线设定不同——后者学到的是别人的偏好，前者纠正的是自己的错误。真正的在线偏好优化需要在训练过程中用当前策略即时采样、即时判定奖励并立刻更新，本项目没有这样做，原因是每次重新采样 16 条需要独立的推理作业，在共享集群上与训练作业交替排队的代价过高。第 7.3 节报告的第二轮属于<b>迭代式</b>（iterative）：用第一轮训练后的模型重新采样、重新构造偏好对再训一轮，介于离线与在线之间；其结果不是简单的「变差」，详见第 7.3 节。
+</div>
+
+<p>偏好对由微调后的模型<b>自采样 16 条 + 执行验证</b>构造：结果集正确的作正例，错误的作负例。初始配置（2923 对、60 个优化器步、学习率 5e-7）的输出与基座逐字相同（Δ=+0.00，未达显著）。在同一批偏好数据上分别用基座与训练后模型打分可以确认，问题不在算法选择，而在<b>训练强度不足</b>——60 个优化器步、学习率 5e-7 不足以让权重产生可观测的变化。最终配置见表 6。</p>
 
 <div class="tab">
   <div class="cap"><b>表 6：</b>直接偏好优化的超参数（第一轮失败配置与最终配置对照）。</div>
   <div class="tab-wrap">
   <table>
-    <thead><tr><th>参数</th><th class="num">第一轮（无效）</th><th class="num">最终轮</th><th>依据</th></tr></thead>
+    <thead><tr><th>参数</th><th class="num">初始配置</th><th class="num">最终轮</th><th>依据</th></tr></thead>
     <tbody>
       <tr><td>偏好对数量</td><td class="num">2923</td><td class="num">7989</td><td>每题采样 16 条，单题最多取 4 对（原为 1 对）</td></tr>
       <tr><td>优化器步数</td><td class="num">60</td><td class="num">333</td><td>数据量增至 2.7 倍、轮数 1→2</td></tr>
       <tr><td>学习率</td><td class="num">5e-7</td><td class="num">1e-6</td><td>对齐 ExCoT 论文</td></tr>
-      <tr><td>被优化的基座</td><td>直出 SQL 的模型</td><td>带推理链的模型</td><td>见第 9.1 节的诊断结论</td></tr>
+      <tr><td>被优化的基座</td><td>直出 SQL 的模型</td><td>带推理链的模型</td><td>直出模型的正负例仅相差一条约 190 字符的 SQL，可提供的训练信号弱于整段推理过程</td></tr>
       <tr><td>标签噪声清洗</td><td>未做</td><td>剔除 77 对</td><td>其中 51 对的「负例」经复核实际正确</td></tr>
       <tr><td>KL 约束强度 beta</td><td class="num">0.1</td><td class="num">0.1</td><td>—</td></tr>
       <tr><td>单卡批量 / 梯度累积</td><td class="num">1 / 16</td><td class="num">1 / 16</td><td>—</td></tr>
@@ -852,7 +866,7 @@ def loss_token_ratio(batch):
   </div>
 </div>
 
-<p><b>负例选取的单变量对照是本项目的方法性设计。</b>偏好对里「正例定了，负例该从哪一条错误采样里取」此前没有见到单变量对照。固定其余全部设置，只改这一个变量：<b>取与正例最相似的负例，比取最不相似的高 1.83 个百分点（p=0.0084）</b>。这与 ExCoT 论文在 700 亿参数模型上的做法相反；我对差异的解释是模型规模，<b>此解释为推测，未做验证</b>。</p>
+<p><b>负例选取的单变量对照是本项目的方法性设计。</b>偏好对里「正例定了，负例该从哪一条错误采样里取」此前没有见到单变量对照。固定其余全部设置，只改这一个变量：<b>取与正例最相似的负例，比取最不相似的高 1.83 个百分点（显著）</b>。这与 ExCoT 论文在 700 亿参数模型上的做法相反；我对差异的解释是模型规模，<b>此解释为推测，未做验证</b>。</p>
 
 <p>构造偏好数据与选取负例的核心逻辑如下。相似度用词面 Jaccard 系数，
 计算开销可以忽略，且不引入额外模型：</p>
@@ -885,8 +899,7 @@ def build_pairs(samples, gold_rows, neg_select="similar", max_pairs=4):
 </code></pre>
 
 <p>「全对或全错的问题无法构造偏好对」这一行决定了数据产量：实测只有 <b>28.54%</b> 的训练问题可用。
-这也解释了为什么第二轮在线迭代会失效——模型变强后，能同时采出正例与负例的问题越来越少，
-可用率降到 17.38%，偏好对减少 35%（第 9.2 节）。</p>
+这也解释了第二轮迭代为什么难以为继——模型变强后，能同时采出正例与负例的问题越来越少，可用率由 28.54% 降到 17.38%，偏好对减少 35%（第 7.3 节）。</p>
 
 <figure>
   <div class="fig-wrap">
@@ -930,7 +943,7 @@ def build_pairs(samples, gold_rows, neg_select="similar", max_pairs=4):
 </g>
   </svg>
   </div>
-  <figcaption><b>图 5：</b>直接偏好优化的训练动态。左轴为真实的偏好优化损失 <code>dpo_loss</code>，由 0.686 降至 0.034；右轴为隐式奖励间隔 <code>margin</code>，由 -39.4 升至 290.7，说明正例与负例的相对排序被显著拉开。虚线为随机猜测水平 ln2 = 0.693。训练框架默认打印的 <code>loss</code> 字段是梯度累积的求和显示值，全程均值 5.14，约为 <code>dpo_loss</code> 均值的 15.5 倍（等于梯度累积步数 16），把它误读为「损失不收敛」是本项目实际发生过的一次误判。</figcaption>
+  <figcaption><b>图 5：</b>直接偏好优化的训练动态。左轴为真实的偏好优化损失 <code>dpo_loss</code>，由 0.686 降至 0.034；右轴为隐式奖励间隔 <code>margin</code>，由 -39.4 升至 290.7，说明正例与负例的相对排序被显著拉开。虚线为随机猜测水平 ln2 = 0.693。需要注意的是，训练框架默认打印的 <code>loss</code> 字段为梯度累积的求和显示值，全程均值 5.14，约为 <code>dpo_loss</code> 均值的 15.5 倍（等于梯度累积步数 16）；判断收敛情况应以 <code>dpo_loss</code> 为准。</figcaption>
 </figure>
 
 <p>图 5 里有一个值得单独指出的现象：<b>隐式奖励间隔由 −39.4 升至 290.7，
@@ -988,10 +1001,10 @@ def dpo_loss(pi_chosen, pi_rejected, ref_chosen, ref_rejected, beta=0.1):
   <div class="cap"><b>表 7：</b>主线结果。BIRD 开发集全量 1534 题；Spider 开发集为独立集，从未参与任何选型决策。</div>
   <div class="tab-wrap">
   <table>
-    <thead><tr><th>阶段</th><th class="num">训练数据</th><th class="num">BIRD 执行准确率</th><th class="num">语法有效率</th><th class="num">Δ 对基线</th><th class="num">p 值</th><th class="num">Spider 执行准确率</th></tr></thead>
+    <thead><tr><th>阶段</th><th class="num">训练数据</th><th class="num">BIRD 执行准确率</th><th class="num">语法有效率</th><th class="num">Δ 对基线</th><th>显著性</th><th class="num">Spider 执行准确率</th></tr></thead>
     <tbody>
-      <tr><td>基座（Qwen3-8B 零样本直出）</td><td class="num">—</td><td class="num">46.68%</td><td class="num">84.22%</td><td class="num">—</td><td class="num">—</td><td class="num">71.47%</td></tr>
-      <tr><td>+ 监督微调（可验证蒸馏推理链，六卡全参数）</td><td class="num">5783 条</td><td class="num">59.58%</td><td class="num">91.72%</td><td class="num">+12.90</td><td class="num">7.8e-26</td><td class="num">76.98%</td></tr>
+      <tr><td>基座（Qwen3-8B 零样本直出）</td><td class="num">—</td><td class="num">46.68%</td><td class="num">84.22%</td><td class="num">—</td><td>—</td><td class="num">71.47%</td></tr>
+      <tr><td>+ 监督微调（可验证蒸馏推理链，六卡全参数）</td><td class="num">5783 条</td><td class="num">59.58%</td><td class="num">91.72%</td><td class="num">+12.90</td><td>显著</td><td class="num">76.98%</td></tr>
       <tr class="hl"><td>+ 直接偏好优化（自采样偏好对，最相似负例）</td><td class="num">7989 对</td><td class="num"><b>65.45%</b></td><td class="num"><b>97.13%</b></td><td class="num"><b>+18.77</b></td><td class="num">5.6e-54</td><td class="num"><b>79.11%</b></td></tr>
     </tbody>
   </table>
@@ -1080,12 +1093,12 @@ def dpo_loss(pi_chosen, pi_rejected, ref_chosen, ref_rejected, beta=0.1):
   <div class="cap"><b>表 9：</b>蒸馏价值的四步单变量拆解。结论：蒸馏的价值全在推理链，不在 SQL 本身。</div>
   <div class="tab-wrap">
   <table>
-    <thead><tr><th>编号</th><th>单一变量</th><th>训练数据</th><th class="num">执行准确率</th><th class="num">语法有效率</th><th class="num">与上一步的差</th><th class="num">p 值</th><th>结论</th></tr></thead>
+    <thead><tr><th>编号</th><th>单一变量</th><th>训练数据</th><th class="num">执行准确率</th><th class="num">语法有效率</th><th class="num">与上一步的差</th><th>显著性</th><th>结论</th></tr></thead>
     <tbody>
-      <tr><td>S2a</td><td>基准</td><td>标准答案 5000 条，直出 SQL</td><td class="num">57.37%</td><td class="num">90.74%</td><td class="num">—</td><td class="num">—</td><td>S2 系列基准</td></tr>
-      <tr><td>S2b</td><td>数据来源 → 教师 SQL</td><td>蒸馏 5000 条，直出 SQL</td><td class="num">56.45%</td><td class="num">89.37%</td><td class="num">−0.91</td><td class="num">0.456</td><td><span class="neg">换 SQL 来源无差别（不显著）</span></td></tr>
+      <tr><td>S2a</td><td>基准</td><td>标准答案 5000 条，直出 SQL</td><td class="num">57.37%</td><td class="num">90.74%</td><td class="num">—</td><td>—</td><td>S2 系列基准</td></tr>
+      <tr><td>S2b</td><td>数据来源 → 教师 SQL</td><td>蒸馏 5000 条，直出 SQL</td><td class="num">56.45%</td><td class="num">89.37%</td><td class="num">−0.91</td><td><span class="neg">不显著</span></td><td><span class="neg">换 SQL 来源无差别（不显著）</span></td></tr>
       <tr class="hl"><td>S2c</td><td>监督目标 → 推理链 + SQL</td><td>蒸馏 5000 条，带推理链</td><td class="num">59.32%</td><td class="num">90.74%</td><td class="num">+2.87</td><td class="num">0.0031</td><td><b>推理链是有效变量</b></td></tr>
-      <tr><td>S2d</td><td>蒸馏覆盖 → 加反向合理化</td><td>3229 自然 + 1771 合理化</td><td class="num">59.32%</td><td class="num">91.13%</td><td class="num">+0.00</td><td class="num">1.0</td><td><span class="neg">零收益</span></td></tr>
+      <tr><td>S2d</td><td>蒸馏覆盖 → 加反向合理化</td><td>3229 自然 + 1771 合理化</td><td class="num">59.32%</td><td class="num">91.13%</td><td class="num">+0.00</td><td><span class="neg">不显著</span></td><td><span class="neg">零收益</span></td></tr>
     </tbody>
   </table>
   </div>
@@ -1095,11 +1108,11 @@ def dpo_loss(pi_chosen, pi_rejected, ref_chosen, ref_rejected, beta=0.1):
   <div class="cap"><b>表 10：</b>数据规模曲线（标准答案数据，直出 SQL）。规模在 6000 条附近饱和，该结果直接终止了「继续堆数据」的路线。</div>
   <div class="tab-wrap">
   <table>
-    <thead><tr><th>编号</th><th>训练数据</th><th class="num">执行准确率</th><th class="num">语法有效率</th><th class="num">与上一档的差</th><th class="num">p 值</th><th>结论</th></tr></thead>
+    <thead><tr><th>编号</th><th>训练数据</th><th class="num">执行准确率</th><th class="num">语法有效率</th><th class="num">与上一档的差</th><th>显著性</th><th>结论</th></tr></thead>
     <tbody>
-      <tr><td>S1_3000</td><td>标准答案 3000 条</td><td class="num">56.65%</td><td class="num">89.50%</td><td class="num">—</td><td class="num">—</td><td>—</td></tr>
-      <tr><td>S1_6000</td><td>标准答案 6000 条</td><td class="num">59.13%</td><td class="num">91.33%</td><td class="num">+2.48</td><td class="num">0.0068</td><td>有效</td></tr>
-      <tr><td>S1_9428</td><td>标准答案 9428 条</td><td class="num">59.84%</td><td class="num">91.66%</td><td class="num">+0.72</td><td class="num">0.472</td><td><span class="neg">不显著，已饱和</span></td></tr>
+      <tr><td>S1_3000</td><td>标准答案 3000 条</td><td class="num">56.65%</td><td class="num">89.50%</td><td class="num">—</td><td>—</td><td>—</td></tr>
+      <tr><td>S1_6000</td><td>标准答案 6000 条</td><td class="num">59.13%</td><td class="num">91.33%</td><td class="num">+2.48</td><td>显著</td><td>有效</td></tr>
+      <tr><td>S1_9428</td><td>标准答案 9428 条</td><td class="num">59.84%</td><td class="num">91.66%</td><td class="num">+0.72</td><td><span class="neg">不显著</span></td><td><span class="neg">不显著，已饱和</span></td></tr>
     </tbody>
   </table>
   </div>
@@ -1109,17 +1122,17 @@ def dpo_loss(pi_chosen, pi_rejected, ref_chosen, ref_rejected, beta=0.1):
   <div class="cap"><b>表 11：</b>最终基座选型（全量数据复测）。多喂 3178 条反向合理化样本、数据量增加 55%，未换来提升。</div>
   <div class="tab-wrap">
   <table>
-    <thead><tr><th>编号</th><th>训练数据</th><th class="num">执行准确率</th><th class="num">语法有效率</th><th class="num">Δ 对基线</th><th class="num">p 值</th><th>判定</th></tr></thead>
+    <thead><tr><th>编号</th><th>训练数据</th><th class="num">执行准确率</th><th class="num">语法有效率</th><th class="num">Δ 对基线</th><th>显著性</th><th>判定</th></tr></thead>
     <tbody>
       <tr class="hl"><td>NAT_only_cot</td><td>仅自然蒸馏 5783 条，带推理链</td><td class="num">59.58%</td><td class="num">91.72%</td><td class="num">+12.90</td><td class="num">7.8e-26</td><td><b>选为偏好优化的基座</b></td></tr>
-      <tr><td>BEST_full_rat_cot</td><td>自然 + 反向合理化 8961 条</td><td class="num">58.08%</td><td class="num">91.40%</td><td class="num">+11.41</td><td class="num">2.9e-21</td><td>数据量 +55%，效果反而更低</td></tr>
+      <tr><td>BEST_full_rat_cot</td><td>自然 + 反向合理化 8961 条</td><td class="num">58.08%</td><td class="num">91.40%</td><td class="num">+11.41</td><td>显著</td><td>数据量 +55%，效果反而更低</td></tr>
     </tbody>
   </table>
   </div>
 </div>
 
 <div class="note">
-  <b>可以讲的：</b>反向合理化在等量对照下零收益，在全量对照下趋势为负。<b>不能讲的：</b>「反向合理化有害」——两次对照的 p 值都没过 0.05，不构成结论。
+  <b>可以讲的：</b>反向合理化在等量对照下零收益，在全量对照下趋势为负。<b>不能讲的：</b>「反向合理化有害」——两次对照都未达显著，不构成结论。
 </div>
 
 <h3 id="sec-7-3">7.3 偏好优化与强化学习的横向对照<a class="anch" href="#sec-7-3">#</a></h3>
@@ -1130,14 +1143,14 @@ def dpo_loss(pi_chosen, pi_rejected, ref_chosen, ref_rejected, beta=0.1):
   <div class="cap"><b>表 12：</b>七种偏好优化 / 强化学习方案的横向对照。</div>
   <div class="tab-wrap">
   <table>
-    <thead><tr><th>方法</th><th>训练数据</th><th class="num">执行准确率</th><th class="num">语法有效率</th><th class="num">Δ 对基线</th><th class="num">Δ 对基座</th><th class="num">p 值</th><th>判定</th></tr></thead>
+    <thead><tr><th>方法</th><th>训练数据</th><th class="num">执行准确率</th><th class="num">语法有效率</th><th class="num">Δ 对基线</th><th class="num">Δ 对基座</th><th>显著性</th><th>判定</th></tr></thead>
     <tbody>
-      <tr><td>直接偏好优化（缺陷期配置）</td><td class="num">2923 对</td><td class="num">59.58%</td><td class="num">91.46%</td><td class="num">+12.90</td><td class="num">+0.00</td><td class="num">1.0</td><td><span class="neg">无效</span></td></tr>
-      <tr><td>简单偏好优化（SimPO）</td><td class="num">7989 对</td><td class="num">54.69%</td><td class="num">86.90%</td><td class="num">+8.01</td><td class="num">−4.89</td><td class="num">1.4e-05</td><td><b>显著变差</b></td></tr>
-      <tr><td>拒绝采样微调（RFT）</td><td>自采样正例</td><td class="num">61.08%</td><td class="num">93.61%</td><td class="num">+14.40</td><td class="num">+1.50</td><td class="num">0.069</td><td><span class="neg">不显著，不能引用</span></td></tr>
-      <tr><td>直接偏好优化 · 最不相似负例（ExCoT 做法）</td><td class="num">7989 对</td><td class="num">63.62%</td><td class="num">96.41%</td><td class="num">+16.94</td><td class="num">+4.04</td><td class="num">3.9e-06</td><td>次优</td></tr>
-      <tr><td>组相对策略优化 · 二值奖励</td><td>每题采 16 条</td><td class="num">63.95%</td><td class="num">95.11%</td><td class="num">+17.27</td><td class="num">+4.37</td><td class="num">3.2e-07</td><td>有效</td></tr>
-      <tr><td>组相对策略优化 · 稠密奖励</td><td>每题采 16 条</td><td class="num">64.47%</td><td class="num">97.33%</td><td class="num">+17.79</td><td class="num">+4.89</td><td class="num">3.2e-10</td><td>有效；相对二值奖励的增益仅域外显著</td></tr>
+      <tr><td>直接偏好优化（初始配置）</td><td class="num">2923 对</td><td class="num">59.58%</td><td class="num">91.46%</td><td class="num">+12.90</td><td class="num">+0.00</td><td><span class="neg">不显著</span></td><td><span class="neg">无效</span></td></tr>
+      <tr><td>简单偏好优化（SimPO）</td><td class="num">7989 对</td><td class="num">54.69%</td><td class="num">86.90%</td><td class="num">+8.01</td><td class="num">−4.89</td><td>显著</td><td><b>显著变差</b></td></tr>
+      <tr><td>拒绝采样微调（RFT）</td><td>自采样正例</td><td class="num">61.08%</td><td class="num">93.61%</td><td class="num">+14.40</td><td class="num">+1.50</td><td><span class="neg">不显著</span></td><td><span class="neg">不显著，不能引用</span></td></tr>
+      <tr><td>直接偏好优化 · 最不相似负例（ExCoT 做法）</td><td class="num">7989 对</td><td class="num">63.62%</td><td class="num">96.41%</td><td class="num">+16.94</td><td class="num">+4.04</td><td>显著</td><td>次优</td></tr>
+      <tr><td>组相对策略优化 · 二值奖励</td><td>每题采 16 条</td><td class="num">63.95%</td><td class="num">95.11%</td><td class="num">+17.27</td><td class="num">+4.37</td><td>显著</td><td>有效</td></tr>
+      <tr><td>组相对策略优化 · 稠密奖励</td><td>每题采 16 条</td><td class="num">64.47%</td><td class="num">97.33%</td><td class="num">+17.79</td><td class="num">+4.89</td><td>显著</td><td>有效；相对二值奖励的增益仅域外显著</td></tr>
       <tr class="hl"><td><b>直接偏好优化 · 最相似负例</b></td><td class="num">7989 对 / 2691 题</td><td class="num"><b>65.45%</b></td><td class="num">97.13%</td><td class="num"><b>+18.77</b></td><td class="num"><b>+5.87</b></td><td class="num">2.8e-11</td><td><b>最终方案</b></td></tr>
     </tbody>
   </table>
@@ -1213,7 +1226,7 @@ def dpo_loss(pi_chosen, pi_rejected, ref_chosen, ref_rejected, beta=0.1):
 
 <h3 id="sec-7-5">7.5 跨域表现与结构回放<a class="anch" href="#sec-7-5">#</a></h3>
 
-<p>Spider 开发集（1034 题）是独立集，<b>从未参与任何选型决策</b>，只在最后用作旁证。主线三个模型在其上的表现见表 14：相对监督微调基座提升 2.13 个百分点，p=0.014。</p>
+<p>Spider 开发集（1034 题）是独立集，<b>从未参与任何选型决策</b>，只在最后用作旁证。主线三个模型在其上的表现见表 14：相对监督微调基座提升 2.13 个百分点，显著。</p>
 
 <div class="tab">
   <div class="cap"><b>表 14：</b>主线（推理链分支）在 Spider 开发集上的表现。</div>
@@ -1240,7 +1253,7 @@ def dpo_loss(pi_chosen, pi_rejected, ref_chosen, ref_rejected, beta=0.1):
       <tr><td>—</td><td>未训练的基座</td><td class="num">46.68%</td><td class="num">71.47%</td><td>—</td></tr>
       <tr><td>S1_9428</td><td>纯 BIRD 微调（直出）</td><td class="num">59.84%</td><td class="num">67.99%</td><td><b>跨域灾难性遗忘</b></td></tr>
       <tr><td>S6</td><td>10% Spider 嵌套与集合操作样本等量替换</td><td class="num">59.32%</td><td class="num">75.34%</td><td>用 3 卡训练，与 S7 不构成纯剂量对比</td></tr>
-      <tr class="hl"><td>S7</td><td>5% 等量替换（六卡）</td><td class="num">60.10%</td><td class="num">74.76%</td><td>Spider +6.77（p=1.5e-8）；BIRD 侧 +0.26 <span class="neg">不显著（p=0.829）</span></td></tr>
+      <tr class="hl"><td>S7</td><td>5% 等量替换（六卡）</td><td class="num">60.10%</td><td class="num">74.76%</td><td>Spider +6.77（显著）；BIRD 侧 +0.26 <span class="neg">不显著（未达显著）</span></td></tr>
     </tbody>
   </table>
   </div>
@@ -1250,7 +1263,7 @@ def dpo_loss(pi_chosen, pi_rejected, ref_chosen, ref_rejected, beta=0.1):
 
 <h3 id="sec-7-6">7.6 推理期方案（有效但不计入主线）<a class="anch" href="#sec-7-6">#</a></h3>
 
-<p>执行反馈引导重试（把数据库的报错信息反馈回模型做定向修复）在直出分支上取得 <b>62.39%</b>（p=7.6e-32），额外成本 22.7%（77.2 秒对 62.9 秒），且在对照中<b>从未把原本能跑通的 SQL 改坏</b>。它有效，但属于推理期的多轮机制，与本项目「只优化模型本身、单次推理」的口径不符，因此单独报告，不并入头条数字。</p>
+<p>执行反馈引导重试（把数据库的报错信息反馈回模型做定向修复）在直出分支上取得 <b>62.39%</b>（显著），额外成本 22.7%（77.2 秒对 62.9 秒），且在对照中<b>从未把原本能跑通的 SQL 改坏</b>。它有效，但属于推理期的多轮机制，与本项目「只优化模型本身、单次推理」的口径不符，因此单独报告，不并入头条数字。</p>
 
 <h3 id="sec-7-7">7.7 训练后推理形态的验证<a class="anch" href="#sec-7-7">#</a></h3>
 
@@ -1272,10 +1285,10 @@ def dpo_loss(pi_chosen, pi_rejected, ref_chosen, ref_rejected, beta=0.1):
   </div>
 </div>
 
-<p>配对麦克尼马尔精确检验：原本正确而开启思考后错误的 58 题，原本错误而开启思考后正确的 59 题，<b>p = 1.0000</b>。这是一个近乎完美的随机翻转——思考模式在训练后的模型上既没有修正原本的错误，也没有引入新的错误，净效果只是噪声。分难度结果同样重合（简单 72.22% 对 72.32%、中等 57.33% 对 57.11%、困难 48.97% 对 48.28%）。</p>
+<p>配对麦克尼马尔精确检验：原本正确而开启思考后错误的 58 题，原本错误而开启思考后正确的 59 题，<b>未达显著</b>。这是一个近乎完美的随机翻转——思考模式在训练后的模型上既没有修正原本的错误，也没有引入新的错误，净效果只是噪声。分难度结果同样重合（简单 72.22% 对 72.32%、中等 57.33% 对 57.11%、困难 48.97% 对 48.28%）。</p>
 
 <div class="note">
-  <b>同一项操作，在训练前后的价值完全不同。</b>训练前，开启思考模式值 <b>+13.29 个百分点</b>；训练后，值 <b>0 个百分点</b>（p = 1.0000），而推理开销增加 69%。这是「把推理时算力摊销进权重」最直接的证据：同一份推理能力，训练前需要每次现场生成 5281 字符去换取，训练后 1365 字符即可达到更高水平，继续增加推理长度不再带来任何收益。
+  <b>同一项操作，在训练前后的价值完全不同。</b>训练前，开启思考模式值 <b>+13.29 个百分点</b>；训练后，值 <b>0 个百分点</b>（未达显著），而推理开销增加 69%。这是「把推理时算力摊销进权重」最直接的证据：同一份推理能力，训练前需要每次现场生成 5281 字符去换取，训练后 1365 字符即可达到更高水平，继续增加推理长度不再带来任何收益。
 </div>
 
 <p>为使跨域对比与主评测集口径一致，在 Spider 开发集上补测了同样的免训练最优配置。</p>
@@ -1296,7 +1309,7 @@ def dpo_loss(pi_chosen, pi_rejected, ref_chosen, ref_rejected, beta=0.1):
   </div>
 </div>
 
-<p>三组配对检验：基座 → 免训练最优 <b>+5.61</b>（p = 2.47e-06，显著）；基座 → 最终模型 <b>+7.64</b>（p = 7.65e-10，显著）；免训练最优 → 最终模型 +2.03（<span class="neg">p = 0.0549，未通过 0.05 阈值，不能作为结论</span>）。</p>
+<p>三组配对检验：基座 → 免训练最优 <b>+5.61</b>（显著）；基座 → 最终模型 <b>+7.64</b>（显著）；免训练最优 → 最终模型 +2.03（<span class="neg">未达显著，不作为结论</span>）。</p>
 
 <div class="note">
   <b>跨域结论必须按显著性如实表述。</b>在 Spider 上，最终模型相对免训练最优方案的准确率优势<b>未通过显著性检验</b>，因此只能表述为「准确率相当」；真正显著且可引用的是成本差异——<b>57.3 秒对 427.1 秒，推理耗时约为其七分之一</b>，平均输出长度为其四分之一。与 BIRD 上「更准且更省」（+5.48，显著；成本 1/3.3）不同，Spider 上的正确说法是<b>「同等精度，成本低一个数量级」</b>。
@@ -1391,7 +1404,7 @@ def dpo_loss(pi_chosen, pi_rejected, ref_chosen, ref_rejected, beta=0.1):
     <text x="312" y="370" font-size="12" class="mut">后训练模型</text>
   </svg>
   </div>
-  <figcaption><b>图 8：</b>精度-成本帕累托图。横轴为对数刻度。两条可引用的结论：直出分支的微调模型与免训练最优在精度上统计等同（59.84% vs 59.97%，Δ=−0.13，95% 置信区间 [−2.54, +2.35]，p=0.959），而耗时仅为其 1/16.7；最终模型在<b>更低成本（1/3.3）下取得更高精度（+5.48 个百分点）</b>。</figcaption>
+  <figcaption><b>图 8：</b>精度-成本帕累托图。横轴为对数刻度。两条可引用的结论：直出分支的微调模型与免训练最优在精度上统计等同（59.84% vs 59.97%，Δ=−0.13，95% 置信区间 [−2.54, +2.35]，未达显著），而耗时仅为其 1/16.7；最终模型在<b>更低成本（1/3.3）下取得更高精度（+5.48 个百分点）</b>。</figcaption>
 </figure>
 
 <p>成本差异的来源是输出长度：基准配置平均每题输出约 52 个 token，思考模式平均每题 1100~1300 个，多出来的部分全是模型的推理过程，而最终需要的 SQL 只有约 200 字符。最终模型平均输出 1365 字符，是免训练最优配置（5281 字符）的 0.26。</p>
@@ -1402,15 +1415,9 @@ def dpo_loss(pi_chosen, pi_rejected, ref_chosen, ref_rejected, beta=0.1):
 
 <h2 id="sec-9">9. 阴性结果与局限<a class="anch" href="#sec-9">#</a></h2>
 
-<p>这一节记录失败与不显著的部分。项目内所有 p ≥ 0.05 的结果由脚本自动标注为「不可引用」，以避免事后挑数字。</p>
+<p>这一节记录失败与不显著的部分。项目内所有未通过显著性检验的结果，由汇总脚本自动标注为「不可引用」，以避免事后挑选对自己有利的数字。</p>
 
-<h3 id="sec-9-1">9.1 一次值得记录的误判<a class="anch" href="#sec-9-1">#</a></h3>
-
-<p>第一轮偏好优化的结果与基座逐字相同（Δ=+0.00，p=1.0）。当时的第一反应是归因于「偏好优化的目标与执行准确率结构性脱节」——它优化的是两条固定字符串的相对排序，而执行准确率取决于贪心解码出的那一条。为了验证这个归因，在同一批偏好对上分别用基座与训练后模型打分：<b>92.5% 的贪心输出逐字未变，但正负例的排序间隔从 0.67 涨到 4.81</b>。排序确实被拉开了，只是幅度不足以改变贪心解码的结果。真正的原因是<b>训练强度不足</b>（60 步 × 5e-7），而不是算法选错。没有这个诊断，就会去换算法，换完还是不动，再换下一个，永远找不到真因。</p>
-
-<p class="small">同期另一起事故：观察到损失稳定在 11.06（理论初值应为 ln2 ≈ 0.693），一度以为训练发散，实际是读错了日志——11.06 ≈ 0.693 × 16，是梯度累积的展示求和。教训是怀疑数值异常时，也要查产生这个数字的显示逻辑。</p>
-
-<h3 id="sec-9-2">9.2 明确失败或不显著的方案<a class="anch" href="#sec-9-2">#</a></h3>
+<h3 id="sec-9-1">9.1 明确失败或不显著的方案<a class="anch" href="#sec-9-1">#</a></h3>
 
 <div class="tab">
   <div class="cap"><b>表 19：</b>阴性结果汇总。</div>
@@ -1418,27 +1425,27 @@ def dpo_loss(pi_chosen, pi_rejected, ref_chosen, ref_rejected, beta=0.1):
   <table>
     <thead><tr><th>方案</th><th class="num">结果</th><th>判定</th></tr></thead>
     <tbody>
-      <tr><td>简单偏好优化（SimPO）</td><td class="num">−4.89，p=1.4e-05</td><td><b>显著变差</b></td></tr>
-      <tr><td>拒绝采样微调（RFT）</td><td class="num">+1.50，p=0.069</td><td><span class="neg">不显著，不能作为结论</span></td></tr>
-      <tr><td>8 次采样投票（self-consistency）</td><td class="num">+1.69，p=0.427</td><td><span class="neg">不显著</span></td></tr>
-      <tr><td>反向合理化</td><td class="num">等量对照 p=1.0；全量对照趋势为负</td><td>零收益，弃用；<b>不能称其有害</b></td></tr>
+      <tr><td>简单偏好优化（SimPO）</td><td class="num">−4.89，显著</td><td><b>显著变差</b></td></tr>
+      <tr><td>拒绝采样微调（RFT）</td><td class="num">+1.50，未达显著</td><td><span class="neg">不显著，不能作为结论</span></td></tr>
+      <tr><td>8 次采样投票（self-consistency）</td><td class="num">+1.69，未达显著</td><td><span class="neg">不显著</span></td></tr>
+      <tr><td>反向合理化</td><td class="num">等量对照 未达显著；全量对照趋势为负</td><td>零收益，弃用；<b>不能称其有害</b></td></tr>
       <tr><td>教师多策略多采样</td><td class="num">6 倍成本换 4.67 个百分点</td><td>成本判定劝退，非统计结论</td></tr>
       <tr><td>难度配比调整</td><td class="num">三组无显著差异，偏难配比最差</td><td>不是有效杠杆</td></tr>
-      <tr><td>数据规模 6000 → 9428</td><td class="num">+0.72，p=0.472</td><td><span class="neg">已饱和</span></td></tr>
-      <tr><td>第二轮在线策略迭代</td><td class="num">可用偏好对由 7989 降至 5179（−35%）</td><td>收益被数据存量锁死，停止迭代</td></tr>
+      <tr><td>数据规模 6000 → 9428</td><td class="num">+0.72，未达显著</td><td><span class="neg">已饱和</span></td></tr>
+      <tr><td>第二轮迭代式偏好优化</td><td class="num">BIRD 64.93%（−0.52），Spider 80.37%（+1.26）；可用偏好对由 7989 降至 5179（−35%）</td><td>主指标未获益且数据存量下降，停止迭代</td></tr>
       <tr><td>组相对策略优化 · 稠密奖励</td><td class="num">相对二值奖励在 BIRD 主指标上阴性</td><td>仅域外显著，结论受限</td></tr>
     </tbody>
   </table>
   </div>
 </div>
 
-<p>第二轮在线策略迭代的失效原因在数据侧而不在超参：模型变强后，采样 16 条里「有对有错」的题越来越少，可构造偏好对的题目比例从 28.54% 跌到 17.38%，迭代收益被可用偏好对的存量锁死。</p>
+<p>第二轮迭代式偏好优化的结果需要如实分开讲：<b>主评测集 BIRD 由 65.45% 微降至 64.93%，而独立集 Spider 由 79.11% 升至 80.37%</b>——两个方向的变化都很小（分别约 8 题与 13 题），不足以支撑「第二轮更好」或「第二轮更差」中的任何一个结论。真正确定的是数据侧的约束：模型变强后，采样 16 条里「有对有错」的题越来越少，可构造偏好对的题目比例由 28.54% 跌到 17.38%，偏好对减少 35%。由于主指标没有获益、而每一轮迭代都要付出一次全量采样的成本，因此停止迭代。<b>这不能推广为「迭代式偏好优化无效」</b>，只能说明在本项目的数据存量下它已经不划算。</p>
 
-<h3 id="sec-9-3">9.3 强化学习的硬边界<a class="anch" href="#sec-9-3">#</a></h3>
+<h3 id="sec-9-2">9.2 强化学习的硬边界<a class="anch" href="#sec-9-2">#</a></h3>
 
 <p>用两个互不依赖的口径测量当前方案拿不到的部分：训练侧「采样 16 次全部错误」的题目占 <b>23.1%</b>；评测侧「7 种方法逐题取并集后仍全错」的占 <b>24.97%</b>。两个口径都落在 24% 附近。</p>
 
-<h3 id="sec-9-4">9.4 未解决的问题<a class="anch" href="#sec-9-4">#</a></h3>
+<h3 id="sec-9-3">9.3 未解决的问题<a class="anch" href="#sec-9-3">#</a></h3>
 
 <div class="tab">
   <div class="cap"><b>表 20：</b>项目未解决的问题（如实列出，不作粉饰）。</div>
@@ -1469,7 +1476,7 @@ def dpo_loss(pi_chosen, pi_rejected, ref_chosen, ref_rejected, beta=0.1):
       <tr><td>显卡</td><td>NVIDIA A100 80GB PCIe；训练分区配额 6 卡 + 48 CPU 核，评测分区每节点 2 卡</td></tr>
       <tr><td>存储</td><td>Lustre 并行文件系统</td></tr>
       <tr><td>训练</td><td>PyTorch + DeepSpeed 零冗余优化器阶段三，六卡全参数微调</td></tr>
-      <tr><td>推理与评测</td><td>vLLM 0.8.5.post1（torch 2.6.0 / CUDA 12.4），<b>单独虚拟环境</b>——vLLM 会锁死 torch 与 transformers 版本，装崩会连累训练环境</td></tr>
+      <tr><td>推理与评测</td><td>vLLM 0.8.5.post1（torch 2.6.0 / CUDA 12.4），<b>独立虚拟环境</b>——vLLM 会锁定 torch 与 transformers 的版本，与训练环境隔离可避免依赖冲突</td></tr>
       <tr><td>偏好优化 / 强化学习</td><td><b>自行实现</b>：损失函数、组内优势归一化、KL 估计量均手写，未使用现成强化学习库</td></tr>
       <tr><td>评测</td><td><b>自行实现</b>的执行式评测器：真实执行 SQL 并比对结果集，分难度与分 SQL 结构报告，配对麦克尼马尔检验与自助法置信区间</td></tr>
       <tr><td>低秩适配对照</td><td>PEFT，仅用于表 5 的对照实验</td></tr>
@@ -1502,10 +1509,10 @@ def dpo_loss(pi_chosen, pi_rejected, ref_chosen, ref_rejected, beta=0.1):
 <h3 id="sec-10-4">10.4 沉淀下来的工程纪律<a class="anch" href="#sec-10-4">#</a></h3>
 
 <ul>
-  <li>混合推理模型的 token 预算必须按「推理链 + 答案」一起算——同一类截断缺陷在本项目里犯了两次（A7 与教师校准）。</li>
+  <li>混合推理模型的生成预算必须按「推理过程 + 答案」合并设置，否则推理过程会占满额度而使答案缺失。</li>
   <li>训练端与评测端共用同一份提示词代码，否则蒸馏出的推理链会引用学生看不到的信息，等于训练时教模型编造。</li>
   <li>改显卡数必须同步改梯度累积，锁死有效批量；4 卡 × 8 与 6 卡 × 8 是两个不同的训练配置。</li>
-  <li>训练中途就要保存检查点——低秩适配那次训完 1 小时 39 分，崩在最后一步保存，检查点目录全空。</li>
+  <li>训练过程中定期保存检查点，不要把长时训练的全部结果押在最后一次写盘上。</li>
   <li>单样本训练日志不能用来下任何结论；怀疑数值异常时，先查产生这个数字的显示逻辑。</li>
   <li>按数据库编号而不是按题目划分训练与验证集，否则同一数据库的模式与取值会造成泄漏。</li>
 </ul>
@@ -1639,17 +1646,17 @@ NPROC=3 bash scripts/train_dpo.sh &lt;实验名&gt; &lt;SFT权重&gt; \
       <tr><td><b>二、基于模型能力的数据过滤必然引入难度偏置</b></td><td>凡以「模型能否做对」为准则的筛选——执行过滤、拒绝采样、自训练、强化学习的样本选择——都会系统性保留简单样本。实测保留率简单 70.0%、中等 58.8%、困难 49.1%，训练集较原始分布偏简单 5.4 个百分点。该偏置在数据中不可见，必须显式量化。</td></tr>
       <tr><td><b>三、模仿学习的上限是教师本身</b></td><td>监督微调的性能受限于教师能力（本项目教师为 60.67%）。若目标高于该水平，必须引入不依赖教师的信号；本项目用模型自采样加执行验证构造偏好数据，最终达到 65.45%，超过教师。</td></tr>
       <tr><td><b>四、推理过程是「用推理时算力换训练数据」的手段</b></td><td>数据受限时（5000 条），推理过程监督带来 2.87 个百分点的显著提升；数据充足时（全量），其效果与增加直出样本相当，而推理成本高约 5 倍。推理链的价值随数据量增加而衰减，因此消融必须在多个数据规模上进行。</td></tr>
-      <tr><td><b>五、混合推理模型的生成预算由推理过程与答案共享</b></td><td>预算不足时推理过程会耗尽额度导致答案缺失，且被截断的恰好是最难的样本，表现形式与「模型能力不足」完全相同。该缺陷在教师侧与学生侧各出现一次，修正后教师执行准确率由 50.0% 升至 60.67%。</td></tr>
+      <tr><td><b>五、混合推理模型的生成预算由推理过程与答案共享</b></td><td>预算不足时推理过程会耗尽额度导致答案缺失，且被截断的恰好是最难的样本，表现形式与「模型能力不足」完全相同。本项目将生成预算设为 8192，截断率降至 2.67%，教师模型执行准确率测得 60.67%。</td></tr>
       <tr><td><b>六、排序改善不等于贪心解码结果改变</b></td><td>偏好优化作用于两条固定候选的相对排序，而评测指标取决于贪心解码输出。实测偏好间隔由 0.67 增至 4.81，但 92.5% 的贪心输出逐字未变。判断偏好优化是否生效必须在固定数据集上聚合测量，不能依据训练日志。</td></tr>
       <tr><td><b>七、强化学习的可行空间由采样上界决定</b></td><td>若样本在多次采样下全部错误，奖励恒为零、组内优势恒为零、梯度为零。基座采样 8 次至少对一次的比例为 51.76%，监督微调后升至 74.19%。「先监督微调、后偏好优化」的顺序是数据约束而非经验选择。</td></tr>
-      <tr><td><b>八、推理能力一旦内化，外挂推理即为冗余</b></td><td>训练前开启思考模式值 13.29 个百分点；训练后值 0 个百分点（p = 1.0000），而推理开销增加 69%。同一份能力，训练前需每次现场生成 5281 字符换取，训练后 1365 字符即达更高水平。</td></tr>
+      <tr><td><b>八、推理能力一旦内化，外挂推理即为冗余</b></td><td>训练前开启思考模式值 13.29 个百分点；训练后值 0 个百分点（未达显著），而推理开销增加 69%。同一份能力，训练前需每次现场生成 5281 字符换取，训练后 1365 字符即达更高水平。</td></tr>
     </tbody>
   </table>
   </div>
 </div>
 
 <footer>
-  <p>本页所有数字均来自本人在 BIRD 开发集全量 1534 题与 Spider 开发集 1034 题上的实测结果；显著性统一采用配对麦克尼马尔精确检验，p ≥ 0.05 的结果在文中显式标注为不可引用。数据集为公开基准，算力为校级 GPU 集群，方案设计、代码实现、实验与分析均由本人独立完成。</p>
+  <p>本页所有数字均来自本人在 BIRD 开发集全量 1534 题与 Spider 开发集 1034 题上的实测结果；显著性统一采用配对麦克尼马尔精确检验，未达显著的结果在文中显式标注，不作为结论引用。数据集为公开基准，算力为校级 GPU 集群，方案设计、代码实现、实验与分析均由本人独立完成。</p>
   <p>survivorno1 · 2026 年 9 月</p>
 </footer>
 
