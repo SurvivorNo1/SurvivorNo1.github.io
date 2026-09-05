@@ -14,10 +14,6 @@
             {
                 "path": "/assets/blogs/2026/leetcode_top100.html",
                 "description": "leetcode hot 100速览"
-            },
-            {
-                "path": "/text2sql.html",
-                "description": "Text2SQL 领域后训练技术报告"
             }
         ]
     },
